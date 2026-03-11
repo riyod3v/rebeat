@@ -544,6 +544,73 @@
   50%       { box-shadow: 0 0 0 6px rgba(255, 71, 87, 0.4); }
 }
 
+/* ── Playback/Download/Clear Buttons ── */
+.lp-btn--playback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-color: rgba(46, 213, 115, 0.45);
+  background: rgba(46, 213, 115, 0.12);
+  color: rgba(46, 213, 115, 0.95);
+}
+.lp-btn--playback:hover {
+  background: rgba(46, 213, 115, 0.22);
+}
+.lp-btn--playback-active {
+  background: rgba(46, 213, 115, 0.25);
+  border-color: rgba(46, 213, 115, 0.6);
+  animation: lpPlaybackPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes lpPlaybackPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.lp-btn--download {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  font-size: 14px;
+  border-color: rgba(52, 152, 219, 0.45);
+  background: rgba(52, 152, 219, 0.12);
+  color: rgba(52, 152, 219, 0.95);
+}
+.lp-btn--download:hover {
+  background: rgba(52, 152, 219, 0.25);
+}
+
+.lp-btn--clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.08);
+  color: rgba(255, 107, 107, 0.85);
+}
+.lp-btn--clear:hover {
+  background: rgba(255, 107, 107, 0.18);
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+/* Mobile hamburger recording items */
+.lp-hamburger-item--playing {
+  background: rgba(46, 213, 115, 0.15);
+  color: rgba(46, 213, 115, 1);
+}
+.lp-hamburger-item--danger {
+  color: rgba(255, 107, 107, 0.9);
+}
+.lp-hamburger-item--danger:hover {
+  background: rgba(255, 107, 107, 0.15);
+}
+
 /* ── Tutorial Button ── */
 .lp-btn--tutorial {
   display: flex;

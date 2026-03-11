@@ -29,6 +29,11 @@ export class AudioEngine {
     this._activeLoopByColumn = new Map(); // column -> clipId
     this._queuedLoopByColumn = new Map(); // column -> clipId
     this._scheduledEventIds = new Set();
+
+    // Recording state
+    this._isRecording = false;
+    this._recordedEvents = [];       // Array of { clipId, ticksFromStart, position, timestamp }
+    this._recordingStartTicks = 0;
   }
 
   dispose() {
@@ -207,6 +212,17 @@ export class AudioEngine {
     if (!entry) return;
 
     const { clip, column } = entry;
+
+    // Record the event if recording is active
+    if (this._isRecording) {
+      this._recordedEvents.push({
+        clipId,
+        ticksFromStart: Tone.Transport.ticks - this._recordingStartTicks,
+        position: Tone.Transport.position,
+        timestamp: Tone.now(),
+        type: clip.type,
+      });
+    }
 
     if (clip.type === 'stop') {
       this.stopColumn(column);
@@ -610,5 +626,91 @@ export class AudioEngine {
    */
   getClipInfo(clipId) {
     return this._clipIndex.get(clipId);
+  }
+
+  // =========================================================================
+  // RECORDING
+  // =========================================================================
+
+  /**
+   * Start recording pad triggers
+   */
+  startRecording() {
+    this._isRecording = true;
+    this._recordedEvents = [];
+    this._recordingStartTicks = Tone.Transport.ticks;
+  }
+
+  /**
+   * Stop recording and return the recorded sequence
+   * @returns {object} Recording data with events, bpm, duration
+   */
+  stopRecording() {
+    this._isRecording = false;
+    return this.getRecordedSequence();
+  }
+
+  /**
+   * Check if currently recording
+   * @returns {boolean}
+   */
+  isRecording() {
+    return this._isRecording;
+  }
+
+  /**
+   * Get the current recorded sequence data
+   * @returns {object} Recording data
+   */
+  getRecordedSequence() {
+    return {
+      bpm: this._project?.global?.bpm ?? 130,
+      timeSignature: this._project?.global?.timeSignature ?? [4, 4],
+      events: [...this._recordedEvents],
+      durationTicks: Tone.Transport.ticks - this._recordingStartTicks,
+      recordedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Play back a recorded sequence
+   * @param {object} recording - Recording data from stopRecording()
+   * @param {function} onEventPlay - Callback when each event plays (for UI feedback)
+   */
+  playRecording(recording, onEventPlay = () => {}) {
+    if (!recording || !recording.events || recording.events.length === 0) {
+      return;
+    }
+
+    const { events, bpm } = recording;
+    
+    // Set the BPM to match the recording
+    this.setBpm(bpm);
+
+    // Schedule each event
+    events.forEach((event) => {
+      const timeInSeconds = Tone.Ticks(event.ticksFromStart).toSeconds();
+      
+      Tone.Transport.scheduleOnce((time) => {
+        // For loops and oneshots, trigger via the overlay method for fire-and-forget
+        if (event.type === 'stop') {
+          const entry = this._clipIndex.get(event.clipId);
+          if (entry) {
+            this.stopColumn(entry.column);
+          }
+        } else {
+          this.playClipOverlay(event.clipId);
+        }
+        onEventPlay(event.clipId);
+      }, `+${timeInSeconds}`);
+    });
+  }
+
+  /**
+   * Get BPM value
+   * @returns {number}
+   */
+  getBpm() {
+    return Tone.Transport.bpm.value;
   }
 }

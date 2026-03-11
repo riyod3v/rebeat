@@ -47,6 +47,8 @@ const App = () => {
   const [gameHighlightedPads, setGameHighlightedPads] = useState(new Set());
   const [gameFeedbackPads, setGameFeedbackPads] = useState(new Map());
   const [isRecording, setIsRecording] = useState(false);
+  const [lastRecording, setLastRecording] = useState(null); // Holds recorded sequence
+  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   // Tutorial shown automatically only the FIRST time the user enters Game mode.
   // After that it only appears when the user manually clicks the "?" button.
@@ -464,9 +466,103 @@ const App = () => {
     }
   }, [appMode, handleGamePadClick, handleFreestylePadClick]);
 
-  // Toggle recording (UI state only — audio recording not yet implemented)
-  const handleToggleRecord = useCallback(() => {
-    setIsRecording(prev => !prev);
+  // Toggle recording
+  const handleToggleRecord = useCallback(async () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    if (isRecording) {
+      // Stop recording and save the sequence
+      const recording = engine.stopRecording();
+      setLastRecording(recording);
+      setIsRecording(false);
+    } else {
+      // Ensure audio is ready
+      const ok = await ensureAudioReady();
+      if (!ok) return;
+
+      // Start transport if not running
+      if (!engine.isTransportRunning()) {
+        engine.startTransport();
+        setIsPlaying(true);
+      }
+
+      // Start recording
+      engine.startRecording();
+      setIsRecording(true);
+    }
+  }, [isRecording, ensureAudioReady]);
+
+  // Play back the last recording
+  const handlePlayRecording = useCallback(async () => {
+    const engine = engineRef.current;
+    if (!engine || !lastRecording || lastRecording.events.length === 0) return;
+
+    const ok = await ensureAudioReady();
+    if (!ok) return;
+
+    // Stop any current transport
+    if (engine.isTransportRunning()) {
+      engine.stopTransport();
+      setIsPlaying(false);
+      setClipStatesById(new Map());
+    }
+
+    // Small delay then start
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Start transport
+    engine.startTransport();
+    setIsPlaying(true);
+    setIsPlayingRecording(true);
+
+    // Play recording
+    engine.playRecording(lastRecording, (clipId) => {
+      // Optional: flash the pad when it plays
+    });
+
+    // Calculate total duration and stop after
+    const durationMs = (lastRecording.durationTicks / 960) * (60000 / lastRecording.bpm) * 4;
+    setTimeout(() => {
+      setIsPlayingRecording(false);
+    }, durationMs + 500);
+  }, [lastRecording, ensureAudioReady]);
+
+  // Download the recording as JSON
+  const handleDownloadRecording = useCallback(() => {
+    if (!lastRecording || lastRecording.events.length === 0) return;
+
+    // Create a clean export object
+    const exportData = {
+      version: 1,
+      type: 'rebeat-recording',
+      name: `Recording-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}`,
+      bpm: lastRecording.bpm,
+      timeSignature: lastRecording.timeSignature,
+      recordedAt: lastRecording.recordedAt,
+      durationTicks: lastRecording.durationTicks,
+      events: lastRecording.events.map(e => ({
+        clipId: e.clipId,
+        ticksFromStart: e.ticksFromStart,
+        position: e.position,
+        type: e.type,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${exportData.name}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [lastRecording]);
+
+  // Clear the recording
+  const handleClearRecording = useCallback(() => {
+    setLastRecording(null);
   }, []);
 
   // Ensure empty clip states default to idle.
@@ -511,6 +607,11 @@ const App = () => {
         onRestartGame={handleRestartGame}
         isRecording={isRecording}
         onToggleRecord={handleToggleRecord}
+        hasRecording={lastRecording && lastRecording.events.length > 0}
+        isPlayingRecording={isPlayingRecording}
+        onPlayRecording={handlePlayRecording}
+        onDownloadRecording={handleDownloadRecording}
+        onClearRecording={handleClearRecording}
         onShowTutorial={() => setShowTutorial(true)}
         onShowAccount={() => setShowAccount(true)}
         currentUser={currentUser}

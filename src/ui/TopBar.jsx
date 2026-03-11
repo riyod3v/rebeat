@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FaUser, FaPlay, FaStop, FaGamepad, FaRedo, FaQuestionCircle } from 'react-icons/fa';
+import { FaUser, FaPlay, FaStop, FaGamepad, FaRedo, FaQuestionCircle, FaDownload, FaTrash } from 'react-icons/fa';
 import { GamePhase } from './padStates';
 
 export function TopBar({
@@ -14,6 +14,11 @@ export function TopBar({
   onResetGame,
   isRecording = false,
   onToggleRecord,
+  hasRecording = false,
+  isPlayingRecording = false,
+  onPlayRecording,
+  onDownloadRecording,
+  onClearRecording,
   onShowTutorial,
   onShowAccount,
   onRestartGame,
@@ -96,10 +101,40 @@ export function TopBar({
               className={`lp-btn lp-btn--record ${isRecording ? 'lp-btn--record-active' : ''}`}
               type="button"
               onClick={onToggleRecord}
+              disabled={isPlayingRecording}
             >
               <span className="lp-record-dot" />
-              Record
+              {isRecording ? 'Stop Rec' : 'Record'}
             </button>
+            {hasRecording && !isRecording && (
+              <>
+                <button
+                  className={`lp-btn lp-btn--playback ${isPlayingRecording ? 'lp-btn--playback-active' : ''}`}
+                  type="button"
+                  onClick={onPlayRecording}
+                  disabled={isPlayingRecording}
+                  title="Play recording"
+                >
+                  <FaPlay /> Play Rec
+                </button>
+                <button
+                  className="lp-btn lp-btn--download"
+                  type="button"
+                  onClick={onDownloadRecording}
+                  title="Download recording as JSON"
+                >
+                  <FaDownload />
+                </button>
+                <button
+                  className="lp-btn lp-btn--clear"
+                  type="button"
+                  onClick={onClearRecording}
+                  title="Clear recording"
+                >
+                  <FaTrash />
+                </button>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -201,11 +236,44 @@ export function TopBar({
                   className={`lp-hamburger-item ${isRecording ? 'lp-hamburger-item--recording' : ''}`}
                   onClick={act(onToggleRecord)}
                   role="menuitem"
+                  disabled={isPlayingRecording}
                 >
                   <span className="lp-hi-icon lp-hi-record-dot" />
-                  <span className="lp-hi-label">Record</span>
+                  <span className="lp-hi-label">{isRecording ? 'Stop Recording' : 'Record'}</span>
                   {isRecording && <span className="lp-hi-badge">REC</span>}
                 </button>
+                {hasRecording && !isRecording && (
+                  <>
+                    <button
+                      type="button"
+                      className={`lp-hamburger-item ${isPlayingRecording ? 'lp-hamburger-item--playing' : ''}`}
+                      onClick={act(onPlayRecording)}
+                      role="menuitem"
+                      disabled={isPlayingRecording}
+                    >
+                      <span className="lp-hi-icon"><FaPlay /></span>
+                      <span className="lp-hi-label">Play Recording</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="lp-hamburger-item"
+                      onClick={act(onDownloadRecording)}
+                      role="menuitem"
+                    >
+                      <span className="lp-hi-icon"><FaDownload /></span>
+                      <span className="lp-hi-label">Download</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="lp-hamburger-item lp-hamburger-item--danger"
+                      onClick={act(onClearRecording)}
+                      role="menuitem"
+                    >
+                      <span className="lp-hi-icon"><FaTrash /></span>
+                      <span className="lp-hi-label">Clear Recording</span>
+                    </button>
+                  </>
+                )}
               </>
             )}
 
