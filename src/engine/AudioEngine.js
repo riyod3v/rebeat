@@ -687,11 +687,16 @@ export class AudioEngine {
     // Set the BPM to match the recording
     this.setBpm(bpm);
 
-    // Schedule each event
+    // Schedule each event at its exact time
+    // Use Tone.now() as the base time so all events are relative to the same start point
+    const startTime = Tone.now();
+
     events.forEach((event) => {
       const timeInSeconds = Tone.Ticks(event.ticksFromStart).toSeconds();
+      const absoluteTime = startTime + timeInSeconds;
       
-      Tone.Transport.scheduleOnce((time) => {
+      // Schedule using absolute audio time for precise timing
+      Tone.Transport.scheduleOnce(() => {
         // For loops and oneshots, trigger via the overlay method for fire-and-forget
         if (event.type === 'stop') {
           const entry = this._clipIndex.get(event.clipId);
@@ -699,11 +704,62 @@ export class AudioEngine {
             this.stopColumn(entry.column);
           }
         } else {
-          this.playClipOverlay(event.clipId);
+          // Use sync version for playback to avoid async delays
+          this._playClipOverlaySync(event.clipId, absoluteTime);
         }
         onEventPlay(event.clipId);
-      }, `+${timeInSeconds}`);
+      }, absoluteTime);
     });
+  }
+
+  /**
+   * Synchronous version of playClipOverlay - doesn't wait for buffer loading
+   * Buffers should already be loaded from preload
+   * @param {string} clipId - The clip ID to play  
+   * @param {number} time - Audio context time to start playback
+   */
+  _playClipOverlaySync(clipId, time) {
+    const entry = this._clipIndex.get(clipId);
+    if (!entry) return;
+
+    const { clip } = entry;
+    if (!clip.source) return;
+
+    const durationMs = this._getClipDurationMs(clip);
+    const audioTime = time ?? Tone.now();
+
+    if (clip.source.kind === 'url') {
+      const player = new Tone.Player(clip.source.url);
+      player.loop = false;
+      player.connect(this._master);
+      
+      // Start immediately - buffer should already be cached from preload
+      // If not loaded yet, Tone.js will handle it gracefully
+      try {
+        player.start(audioTime);
+      } catch {
+        // If buffer not ready, try starting as soon as it's available
+        player.autostart = true;
+      }
+
+      // Auto-dispose after playback completes
+      setTimeout(() => {
+        try {
+          player.stop(Tone.now() + 0.05);
+          setTimeout(() => {
+            try { player.dispose(); } catch { /* ignore */ }
+          }, 100);
+        } catch {
+          try { player.dispose(); } catch { /* ignore */ }
+        }
+      }, durationMs);
+      
+      return;
+    }
+
+    if (clip.source.kind === 'generated') {
+      playGeneratedOneShot(clip.source.generator, { destination: this._master, time: audioTime });
+    }
   }
 
   /**
