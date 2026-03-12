@@ -528,36 +528,38 @@ const App = () => {
     }, durationMs + 500);
   }, [lastRecording, ensureAudioReady]);
 
-  // Download the recording as JSON
-  const handleDownloadRecording = useCallback(() => {
+  // Download the recording as WAV audio
+  const [isExporting, setIsExporting] = useState(false);
+  
+  const handleDownloadRecording = useCallback(async () => {
     if (!lastRecording || lastRecording.events.length === 0) return;
+    
+    const engine = engineRef.current;
+    if (!engine) return;
 
-    // Create a clean export object
-    const exportData = {
-      version: 1,
-      type: 'rebeat-recording',
-      name: `Recording-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}`,
-      bpm: lastRecording.bpm,
-      timeSignature: lastRecording.timeSignature,
-      recordedAt: lastRecording.recordedAt,
-      durationTicks: lastRecording.durationTicks,
-      events: lastRecording.events.map(e => ({
-        clipId: e.clipId,
-        ticksFromStart: e.ticksFromStart,
-        position: e.position,
-        type: e.type,
-      })),
-    };
+    setIsExporting(true);
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${exportData.name}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      // Render to audio
+      const wavBlob = await engine.renderRecordingToAudio(lastRecording, (progress) => {
+        console.log(`Rendering: ${Math.round(progress * 100)}%`);\n      });
+
+      // Download the WAV file
+      const filename = `Rebeat-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.wav`;
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export audio:', err);
+      alert('Failed to export audio. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   }, [lastRecording]);
 
   // Clear the recording
@@ -609,6 +611,7 @@ const App = () => {
         onToggleRecord={handleToggleRecord}
         hasRecording={lastRecording && lastRecording.events.length > 0}
         isPlayingRecording={isPlayingRecording}
+        isExporting={isExporting}
         onPlayRecording={handlePlayRecording}
         onDownloadRecording={handleDownloadRecording}
         onClearRecording={handleClearRecording}

@@ -16,6 +16,7 @@ export function TopBar({
   onToggleRecord,
   hasRecording = false,
   isPlayingRecording = false,
+  isExporting = false,
   onPlayRecording,
   onDownloadRecording,
   onClearRecording,
@@ -112,23 +113,25 @@ export function TopBar({
                   className={`lp-btn lp-btn--playback ${isPlayingRecording ? 'lp-btn--playback-active' : ''}`}
                   type="button"
                   onClick={onPlayRecording}
-                  disabled={isPlayingRecording}
+                  disabled={isPlayingRecording || isExporting}
                   title="Play recording"
                 >
                   <FaPlay /> Play Rec
                 </button>
                 <button
-                  className="lp-btn lp-btn--download"
+                  className={`lp-btn lp-btn--download ${isExporting ? 'lp-btn--download-active' : ''}`}
                   type="button"
                   onClick={onDownloadRecording}
-                  title="Download recording as JSON"
+                  disabled={isExporting}
+                  title="Download recording as WAV"
                 >
-                  <FaDownload />
+                  {isExporting ? '...' : <FaDownload />}
                 </button>
                 <button
                   className="lp-btn lp-btn--clear"
                   type="button"
                   onClick={onClearRecording}
+                  disabled={isExporting}
                   title="Clear recording"
                 >
                   <FaTrash />

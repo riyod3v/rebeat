@@ -687,28 +687,27 @@ export class AudioEngine {
     // Set the BPM to match the recording
     this.setBpm(bpm);
 
-    // Schedule each event at its exact time
-    // Use Tone.now() as the base time so all events are relative to the same start point
-    const startTime = Tone.now();
+    // Use setTimeout for reliable playback timing
+    // Convert ticks to milliseconds based on BPM
+    const ticksPerBeat = 480; // Tone.js PPQ
+    const msPerBeat = 60000 / bpm;
+    const msPerTick = msPerBeat / ticksPerBeat;
 
     events.forEach((event) => {
-      const timeInSeconds = Tone.Ticks(event.ticksFromStart).toSeconds();
-      const absoluteTime = startTime + timeInSeconds;
+      const delayMs = event.ticksFromStart * msPerTick;
       
-      // Schedule using absolute audio time for precise timing
-      Tone.Transport.scheduleOnce(() => {
-        // For loops and oneshots, trigger via the overlay method for fire-and-forget
+      setTimeout(() => {
+        // Play the clip
         if (event.type === 'stop') {
           const entry = this._clipIndex.get(event.clipId);
           if (entry) {
             this.stopColumn(entry.column);
           }
         } else {
-          // Use sync version for playback to avoid async delays
-          this._playClipOverlaySync(event.clipId, absoluteTime);
+          this._playClipOverlaySync(event.clipId, Tone.now());
         }
         onEventPlay(event.clipId);
-      }, absoluteTime);
+      }, delayMs);
     });
   }
 
@@ -768,5 +767,149 @@ export class AudioEngine {
    */
   getBpm() {
     return Tone.Transport.bpm.value;
+  }
+
+  /**
+   * Render a recording to an audio buffer (WAV export)
+   * @param {object} recording - Recording data from stopRecording()
+   * @param {function} onProgress - Progress callback (0-1)
+   * @returns {Promise<Blob>} WAV audio blob
+   */
+  async renderRecordingToAudio(recording, onProgress = () => {}) {
+    if (!recording || !recording.events || recording.events.length === 0) {
+      throw new Error('No recording to render');
+    }
+
+    const { events, bpm } = recording;
+    
+    // Calculate duration in seconds
+    const ticksPerBeat = 480;
+    const secondsPerBeat = 60 / bpm;
+    const secondsPerTick = secondsPerBeat / ticksPerBeat;
+    
+    // Find the last event and add some padding for the audio to play
+    const lastEventTicks = Math.max(...events.map(e => e.ticksFromStart));
+    // Add 2 bars worth of time for loops to play
+    const barsToAdd = 2;
+    const ticksPerBar = ticksPerBeat * 4; // Assuming 4/4 time
+    const totalTicks = lastEventTicks + (ticksPerBar * barsToAdd);
+    const durationSeconds = totalTicks * secondsPerTick;
+
+    onProgress(0.1);
+
+    // Pre-load all audio buffers needed
+    const urlsNeeded = new Set();
+    for (const event of events) {
+      const entry = this._clipIndex.get(event.clipId);
+      if (entry?.clip?.source?.kind === 'url') {
+        urlsNeeded.add(entry.clip.source.url);
+      }
+    }
+
+    // Load buffers
+    const bufferCache = new Map();
+    const loadPromises = Array.from(urlsNeeded).map(async (url) => {
+      try {
+        const buffer = await Tone.ToneAudioBuffer.fromUrl(url);
+        bufferCache.set(url, buffer);
+      } catch (e) {
+        console.warn('Failed to load buffer:', url, e);
+      }
+    });
+    await Promise.all(loadPromises);
+
+    onProgress(0.3);
+
+    // Render offline
+    const renderedBuffer = await Tone.Offline(({ transport }) => {
+      transport.bpm.value = bpm;
+      
+      // Create a master gain
+      const master = new Tone.Gain(0.9).toDestination();
+
+      // Schedule all events
+      events.forEach((event) => {
+        const timeInSeconds = event.ticksFromStart * secondsPerTick;
+        const entry = this._clipIndex.get(event.clipId);
+        
+        if (!entry || !entry.clip?.source) return;
+        if (event.type === 'stop') return; // Skip stop events for rendering
+
+        const clip = entry.clip;
+
+        if (clip.source.kind === 'url') {
+          const cachedBuffer = bufferCache.get(clip.source.url);
+          if (cachedBuffer) {
+            const player = new Tone.Player(cachedBuffer).connect(master);
+            player.start(timeInSeconds);
+          }
+        }
+      });
+
+      transport.start(0);
+    }, durationSeconds);
+
+    onProgress(0.8);
+
+    // Convert to WAV blob
+    const wavBlob = await this._bufferToWav(renderedBuffer);
+    
+    onProgress(1.0);
+    return wavBlob;
+  }
+
+  /**
+   * Convert Tone.js buffer to WAV blob
+   * @param {Tone.ToneAudioBuffer} buffer
+   * @returns {Promise<Blob>}
+   */
+  async _bufferToWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const length = buffer.length;
+    
+    // Get audio data
+    const channels = [];
+    for (let i = 0; i < numChannels; i++) {
+      channels.push(buffer.getChannelData(i));
+    }
+
+    // Create WAV file
+    const wavBuffer = new ArrayBuffer(44 + length * numChannels * 2);
+    const view = new DataView(wavBuffer);
+
+    // WAV header
+    const writeString = (offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + length * numChannels * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // fmt chunk size
+    view.setUint16(20, 1, true); // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true); // byte rate
+    view.setUint16(32, numChannels * 2, true); // block align
+    view.setUint16(34, 16, true); // bits per sample
+    writeString(36, 'data');
+    view.setUint32(40, length * numChannels * 2, true);
+
+    // Write audio data (interleaved)
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+        const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+        view.setInt16(offset, intSample, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([wavBuffer], { type: 'audio/wav' });
   }
 }
