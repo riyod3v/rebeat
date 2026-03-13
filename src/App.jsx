@@ -9,6 +9,7 @@ import { TopBar } from './ui/TopBar';
 import { LaunchpadGrid } from './ui/LaunchpadGrid';
 import { TutorialModal } from './ui/TutorialModal';
 import { AccountModal } from './ui/AccountModal';
+import { supabase } from './services/supabaseClient';
 
 // Fixed tempo - 130 BPM
 const FIXED_BPM = 130;
@@ -476,6 +477,56 @@ const App = () => {
       const recording = engine.stopRecording();
       setLastRecording(recording);
       setIsRecording(false);
+      
+      // Save recording to Supabase Storage if user is logged in
+      if (currentUser && recording.events.length > 0) {
+        try {
+          // Try to render and upload audio, but don't fail if it doesn't work
+          let audioUrl = null;
+          try {
+            // First, render to audio blob
+            const wavBlob = await engine.renderRecordingToAudio(recording);
+            
+            // Create filename with timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const fileName = `${currentUser.id}/${timestamp}.wav`;
+            
+            // Upload to Supabase Storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('freestyle-audio')
+              .upload(fileName, wavBlob, {
+                contentType: 'audio/wav'
+              });
+              
+            if (!uploadError) {
+              // Get public URL
+              const { data: { publicUrl } } = supabase.storage
+                .from('freestyle-audio')
+                .getPublicUrl(fileName);
+              audioUrl = publicUrl;
+            }
+          } catch (audioErr) {
+            // Continue without audio - we'll save just the event data
+          }
+          
+          // Save recording metadata to database (with or without audio URL)
+          const { error: dbError } = await supabase
+            .from('recordings')
+            .insert({
+              user_id: currentUser.id,
+              audio_url: audioUrl, // Can be null if audio rendering failed
+              title: `Recording ${new Date().toLocaleDateString()}`
+            });
+            
+          if (dbError) {
+            // Error saving recording metadata
+          } else {
+            // Recording saved successfully
+          }
+        } catch (err) {
+          // Failed to save recording
+        }
+      }
     } else {
       // Ensure audio is ready
       const ok = await ensureAudioReady();
@@ -491,7 +542,7 @@ const App = () => {
       engine.startRecording();
       setIsRecording(true);
     }
-  }, [isRecording, ensureAudioReady]);
+  }, [isRecording, ensureAudioReady, currentUser]);
 
   // Play back the last recording
   const handlePlayRecording = useCallback(async () => {
@@ -541,8 +592,7 @@ const App = () => {
 
     try {
       // Render to audio
-      const wavBlob = await engine.renderRecordingToAudio(lastRecording, (progress) => {
-        console.log(`Rendering: ${Math.round(progress * 100)}%`);\n      });
+      const wavBlob = await engine.renderRecordingToAudio(lastRecording);
 
       // Download the WAV file
       const filename = `Rebeat-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.wav`;
@@ -610,9 +660,9 @@ const App = () => {
         isRecording={isRecording}
         onToggleRecord={handleToggleRecord}
         hasRecording={lastRecording && lastRecording.events.length > 0}
+        onPlayRecording={handlePlayRecording}
         isPlayingRecording={isPlayingRecording}
         isExporting={isExporting}
-        onPlayRecording={handlePlayRecording}
         onDownloadRecording={handleDownloadRecording}
         onClearRecording={handleClearRecording}
         onShowTutorial={() => setShowTutorial(true)}
@@ -631,8 +681,32 @@ const App = () => {
         <AccountModal
           onClose={() => setShowAccount(false)}
           currentUser={currentUser}
-          onLogin={(user) => {
-            setCurrentUser(user);
+          onLogin={async (user) => {
+            // Fetch user's profile from Supabase
+            try {
+              const { data: profileData, error } = await supabase
+                .from('profiles')
+                .select('id, username, avatar_url')
+                .eq('id', user.authId)
+                .single();
+                
+              if (error) {
+                console.error('Error fetching profile:', error);
+                // Fallback to auth user data
+                setCurrentUser(user);
+              } else {
+                // Merge auth data with profile data
+                setCurrentUser({
+                  id: profileData.id,
+                  username: profileData.username,
+                  email: user.email,
+                  avatarUrl: profileData.avatar_url
+                });
+              }
+            } catch (err) {
+              console.error('Failed to fetch profile:', err);
+              setCurrentUser(user);
+            }
             setShowAccount(false);
           }}
           onLogout={() => {
