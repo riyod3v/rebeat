@@ -93,6 +93,7 @@
   align-items: flex-start;
   justify-content: center;
   padding: 8px 12px;
+  position: relative;
 }
 
 .lp-section {

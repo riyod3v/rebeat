@@ -9,6 +9,8 @@ import { TopBar } from './ui/TopBar';
 import { LaunchpadGrid } from './ui/LaunchpadGrid';
 import { TutorialModal } from './ui/TutorialModal';
 import { AccountModal } from './ui/AccountModal';
+import { Leaderboard } from './ui/Leaderboard';
+import { UserData } from './ui/UserData';
 import { supabase } from './services/supabaseClient';
 
 // Fixed tempo - 130 BPM
@@ -59,6 +61,7 @@ const App = () => {
   // ACCOUNT / AUTH STATE
   // =========================================================================
   const [showAccount, setShowAccount] = useState(false);
+  const [showUserData, setShowUserData] = useState(false);
   const [currentUser, setCurrentUser] = useState(null); // null = logged out
   
   // Track playable clips for game selection
@@ -398,12 +401,38 @@ const App = () => {
       setGameFeedbackPads(new Map([[clipId, 'incorrect']]));
       setGamePhase(GamePhase.gameOver);
 
+      // Save high score to Supabase if user is logged in
+      if (currentUser && gameScore > 0) {
+        saveHighScore(gameScore, gameLevel);
+      }
+
       // Clear feedback after delay
       setTimeout(() => {
         setGameFeedbackPads(new Map());
       }, GAME_CONFIG.gameOverDelayMs);
     }
   }, [gameSequence, playerProgress, gameLevel, generateSequence, playDemoSequence]);
+
+  // Save high score to Supabase
+  const saveHighScore = useCallback(async (score, level) => {
+    if (!currentUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('high_scores')
+        .insert({
+          user_id: currentUser.id,
+          score: score,
+          level_reached: level
+        });
+        
+      if (error) {
+        // Error saving high score
+      }
+    } catch (err) {
+      // Failed to save high score
+    }
+  }, [currentUser]);
 
   // Reset game to ready state
   const handleResetGame = useCallback(() => {
@@ -667,6 +696,7 @@ const App = () => {
         onClearRecording={handleClearRecording}
         onShowTutorial={() => setShowTutorial(true)}
         onShowAccount={() => setShowAccount(true)}
+        onShowUserData={() => setShowUserData(!showUserData)}
         currentUser={currentUser}
       />
 
@@ -731,6 +761,24 @@ const App = () => {
           disableInput={disableInput}
           gameActive={gameActive}
         />
+        
+        {appMode === 'game' && (
+          <Leaderboard 
+            isVisible={true} 
+            currentScore={gameScore}
+            currentUser={currentUser}
+          />
+        )}
+        
+        {showUserData && currentUser && (
+          <UserData 
+            isVisible={showUserData}
+            currentUser={currentUser}
+            onRefresh={() => {
+              // Trigger leaderboard refresh too
+            }}
+          />
+        )}
       </main>
     </div>
   );
