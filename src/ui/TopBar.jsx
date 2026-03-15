@@ -22,6 +22,7 @@ export function TopBar({
   onClearRecording,
   onShowTutorial,
   onShowAccount,
+  onShowUserData,
   onRestartGame,
   currentUser = null,
 }) {
@@ -324,8 +325,7 @@ export function TopBar({
               </>
             )}
 
-            {/* Divider + Account — always present */}
-            <div className="lp-hi-divider" />
+            {/* Account */}
             <button
               type="button"
               className="lp-hamburger-item"
@@ -342,6 +342,22 @@ export function TopBar({
                 {currentUser ? currentUser.username : 'Login / Register'}
               </span>
             </button>
+            
+            {/* User Data — only show when logged in */}
+            {currentUser && (
+              <>
+                <div className="lp-hi-divider" />
+                <button
+                  type="button"
+                  className="lp-hamburger-item"
+                  onClick={act(onShowUserData)}
+                  role="menuitem"
+                >
+                  <span className="lp-hi-icon">📊</span>
+                  <span className="lp-hi-label">My Data</span>
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

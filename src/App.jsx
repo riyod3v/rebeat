@@ -9,6 +9,9 @@ import { TopBar } from './ui/TopBar';
 import { LaunchpadGrid } from './ui/LaunchpadGrid';
 import { TutorialModal } from './ui/TutorialModal';
 import { AccountModal } from './ui/AccountModal';
+import { Leaderboard } from './ui/Leaderboard';
+import { UserData } from './ui/UserData';
+import { supabase } from './services/supabaseClient';
 
 // Fixed tempo - 130 BPM
 const FIXED_BPM = 130;
@@ -58,6 +61,7 @@ const App = () => {
   // ACCOUNT / AUTH STATE
   // =========================================================================
   const [showAccount, setShowAccount] = useState(false);
+  const [showUserData, setShowUserData] = useState(false);
   const [currentUser, setCurrentUser] = useState(null); // null = logged out
   
   // Track playable clips for game selection
@@ -397,12 +401,38 @@ const App = () => {
       setGameFeedbackPads(new Map([[clipId, 'incorrect']]));
       setGamePhase(GamePhase.gameOver);
 
+      // Save high score to Supabase if user is logged in
+      if (currentUser && gameScore > 0) {
+        saveHighScore(gameScore, gameLevel);
+      }
+
       // Clear feedback after delay
       setTimeout(() => {
         setGameFeedbackPads(new Map());
       }, GAME_CONFIG.gameOverDelayMs);
     }
   }, [gameSequence, playerProgress, gameLevel, generateSequence, playDemoSequence]);
+
+  // Save high score to Supabase
+  const saveHighScore = useCallback(async (score, level) => {
+    if (!currentUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('high_scores')
+        .insert({
+          user_id: currentUser.id,
+          score: score,
+          level_reached: level
+        });
+        
+      if (error) {
+        // Error saving high score
+      }
+    } catch (err) {
+      // Failed to save high score
+    }
+  }, [currentUser]);
 
   // Reset game to ready state
   const handleResetGame = useCallback(() => {
@@ -470,6 +500,7 @@ const App = () => {
   const handleToggleRecord = useCallback(async () => {
     const engine = engineRef.current;
     if (!engine) return;
+    const currentUserId = currentUser?.id ?? currentUser?.authId ?? null;
 
     if (isRecording) {
       // Stop recording and save the sequence
@@ -481,6 +512,56 @@ const App = () => {
         setLastRecording(recording);
       }
       setIsRecording(false);
+      
+      // Save recording to Supabase Storage if user is logged in
+      if (currentUserId && recording.events.length > 0) {
+        try {
+          // Try to render and upload audio, but don't fail if it doesn't work
+          let audioUrl = null;
+          try {
+            // First, render to audio blob
+            const wavBlob = await engine.renderRecordingToAudio(recording);
+            
+            // Create filename with timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const fileName = `${currentUserId}/${timestamp}.wav`;
+            
+            // Upload to Supabase Storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('freestyle-audio')
+              .upload(fileName, wavBlob, {
+                contentType: 'audio/wav'
+              });
+              
+            if (!uploadError) {
+              // Get public URL
+              const { data: { publicUrl } } = supabase.storage
+                .from('freestyle-audio')
+                .getPublicUrl(fileName);
+              audioUrl = publicUrl;
+            }
+          } catch (audioErr) {
+            // Continue without audio - we'll save just the event data
+          }
+          
+          // Save recording metadata to database (with or without audio URL)
+          const { error: dbError } = await supabase
+            .from('recordings')
+            .insert({
+              user_id: currentUserId,
+              audio_url: audioUrl, // Can be null if audio rendering failed
+              title: `Recording ${new Date().toLocaleDateString()}`
+            });
+            
+          if (dbError) {
+            // Error saving recording metadata
+          } else {
+            // Recording saved successfully
+          }
+        } catch (err) {
+          // Failed to save recording
+        }
+      }
     } else {
       // Ensure audio is ready
       const ok = await ensureAudioReady();
@@ -496,7 +577,7 @@ const App = () => {
       engine.startRecording();
       setIsRecording(true);
     }
-  }, [isRecording, ensureAudioReady]);
+  }, [isRecording, ensureAudioReady, currentUser]);
 
   // Play back the last recording
   const handlePlayRecording = useCallback(async () => {
@@ -625,13 +706,14 @@ const App = () => {
         isRecording={isRecording}
         onToggleRecord={handleToggleRecord}
         hasRecording={lastRecording && lastRecording.events.length > 0}
+        onPlayRecording={handlePlayRecording}
         isPlayingRecording={isPlayingRecording}
         isExporting={isExporting}
-        onPlayRecording={handlePlayRecording}
         onDownloadRecording={handleDownloadRecording}
         onClearRecording={handleClearRecording}
         onShowTutorial={() => setShowTutorial(true)}
         onShowAccount={() => setShowAccount(true)}
+        onShowUserData={() => setShowUserData(!showUserData)}
         currentUser={currentUser}
       />
 
@@ -646,8 +728,38 @@ const App = () => {
         <AccountModal
           onClose={() => setShowAccount(false)}
           currentUser={currentUser}
-          onLogin={(user) => {
-            setCurrentUser(user);
+          onLogin={async (user) => {
+            // Fetch user's profile from Supabase
+            try {
+              const { data: profileData, error } = await supabase
+                .from('profiles')
+                .select('id, username, avatar_url')
+                .eq('id', user.authId)
+                .single();
+                
+              if (error) {
+                console.error('Error fetching profile:', error);
+                // Fallback to auth user data
+                setCurrentUser({
+                  ...user,
+                  id: user.id ?? user.authId,
+                });
+              } else {
+                // Merge auth data with profile data
+                setCurrentUser({
+                  id: profileData.id,
+                  username: profileData.username,
+                  email: user.email,
+                  avatarUrl: profileData.avatar_url
+                });
+              }
+            } catch (err) {
+              console.error('Failed to fetch profile:', err);
+              setCurrentUser({
+                ...user,
+                id: user.id ?? user.authId,
+              });
+            }
             setShowAccount(false);
           }}
           onLogout={() => {
@@ -672,6 +784,24 @@ const App = () => {
           disableInput={disableInput}
           gameActive={gameActive}
         />
+        
+        {appMode === 'game' && (
+          <Leaderboard 
+            isVisible={true} 
+            currentScore={gameScore}
+            currentUser={currentUser}
+          />
+        )}
+        
+        {showUserData && currentUser && (
+          <UserData 
+            isVisible={showUserData}
+            currentUser={currentUser}
+            onRefresh={() => {
+              // Trigger leaderboard refresh too
+            }}
+          />
+        )}
       </main>
     </div>
   );

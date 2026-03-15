@@ -162,9 +162,11 @@ function LoginView({ onClose, onLogin, onSwitch, prefillEmail = '' }) {
 
     const sbUser = data.user;
     onLogin({
-      email:        sbUser.email,
-      username:     sbUser.user_metadata?.username ?? sbUser.email.split('@')[0],
-      highScore:    0,
+      id:          sbUser.id,
+      authId:      sbUser.id, // Supabase auth ID
+      email:       sbUser.email,
+      username:    sbUser.user_metadata?.username ?? sbUser.email.split('@')[0],
+      highScore:   0,
       audioRecords: [],
     });
     onClose();
@@ -235,6 +237,7 @@ function LoginView({ onClose, onLogin, onSwitch, prefillEmail = '' }) {
 // ── Register View ───────────────────────────────────────────────────────────
 function RegisterView({ onRegisterSuccess, onSwitch }) {
   const [email, setEmail]        = useState('');
+  const [username, setUsername]  = useState('');
   const [password, setPassword]  = useState('');
   const [confirm, setConfirm]    = useState('');
   const [showPw, setShowPw]      = useState(false);
@@ -245,7 +248,12 @@ function RegisterView({ onRegisterSuccess, onSwitch }) {
     e.preventDefault();
     setError('');
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
     if (!email.trim())        { setError('Email is required.'); return; }
+    if (!emailRegex.test(email.trim())) { setError('Please enter a valid email address.'); return; }
+    if (!username.trim())      { setError('Username is required.'); return; }
+    if (username.length < 3)   { setError('Username must be at least 3 characters.'); return; }
     if (password.length < 6)  { setError('Password must be at least 6 characters.'); return; }
     if (password !== confirm)  { setError('Passwords do not match.'); return; }
 
@@ -253,6 +261,11 @@ function RegisterView({ onRegisterSuccess, onSwitch }) {
     const { error: authError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: {
+        data: {
+          username: username.trim()
+        }
+      }
     });
     setLoading(false);
 
@@ -271,6 +284,19 @@ function RegisterView({ onRegisterSuccess, onSwitch }) {
 
       {/* Form */}
       <form className="am-form" onSubmit={handleSubmit} noValidate>
+        <div className="am-field">
+          <label className="am-label" htmlFor="am-reg-username">Username</label>
+          <input
+            id="am-reg-username"
+            className="am-input"
+            type="text"
+            placeholder="Choose a username"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </div>
+
         <div className="am-field">
           <label className="am-label" htmlFor="am-reg-email">Email</label>
           <input
