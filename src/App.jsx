@@ -474,7 +474,12 @@ const App = () => {
     if (isRecording) {
       // Stop recording and save the sequence
       const recording = engine.stopRecording();
-      setLastRecording(recording);
+      if (!recording || recording.events.length === 0) {
+        setLastRecording(null);
+        alert('No pads were recorded. Press Record, then trigger pads before stopping.');
+      } else {
+        setLastRecording(recording);
+      }
       setIsRecording(false);
     } else {
       // Ensure audio is ready
@@ -519,10 +524,19 @@ const App = () => {
     // Play recording
     engine.playRecording(lastRecording, (clipId) => {
       // Optional: flash the pad when it plays
+      void clipId;
     });
 
     // Calculate total duration and stop after
-    const durationMs = (lastRecording.durationTicks / 960) * (60000 / lastRecording.bpm) * 4;
+    const ticksPerBeat = 480;
+    const msPerTick = (60000 / lastRecording.bpm) / ticksPerBeat;
+    const maxEventTick = Math.max(
+      ...lastRecording.events.map((event) => event.playTickFromStart ?? event.ticksFromStart ?? 0),
+      0,
+    );
+    // Add one bar tail so loop clips can ring out naturally.
+    const durationMs = (maxEventTick + (ticksPerBeat * 4)) * msPerTick;
+
     setTimeout(() => {
       setIsPlayingRecording(false);
     }, durationMs + 500);
@@ -542,7 +556,8 @@ const App = () => {
     try {
       // Render to audio
       const wavBlob = await engine.renderRecordingToAudio(lastRecording, (progress) => {
-        console.log(`Rendering: ${Math.round(progress * 100)}%`);\n      });
+        console.log(`Rendering: ${Math.round(progress * 100)}%`);
+      });
 
       // Download the WAV file
       const filename = `Rebeat-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.wav`;

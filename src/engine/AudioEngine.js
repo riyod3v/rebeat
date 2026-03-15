@@ -213,11 +213,20 @@ export class AudioEngine {
 
     const { clip, column } = entry;
 
+    const currentTicks = Tone.Transport.ticks;
+    let playTick = currentTicks;
+    if (clip.type === 'loop' || clip.type === 'stop') {
+      playTick = this._nextTick('1m');
+    } else if (clip.type === 'oneShot') {
+      playTick = this._nextTick();
+    }
+
     // Record the event if recording is active
     if (this._isRecording) {
       this._recordedEvents.push({
         clipId,
-        ticksFromStart: Tone.Transport.ticks - this._recordingStartTicks,
+        ticksFromStart: currentTicks - this._recordingStartTicks,
+        playTickFromStart: playTick - this._recordingStartTicks,
         position: Tone.Transport.position,
         timestamp: Tone.now(),
         type: clip.type,
@@ -683,31 +692,30 @@ export class AudioEngine {
     }
 
     const { events, bpm } = recording;
-    
+
     // Set the BPM to match the recording
     this.setBpm(bpm);
 
-    // Use setTimeout for reliable playback timing
-    // Convert ticks to milliseconds based on BPM
-    const ticksPerBeat = 480; // Tone.js PPQ
-    const msPerBeat = 60000 / bpm;
-    const msPerTick = msPerBeat / ticksPerBeat;
+    const baseTick = Tone.Transport.ticks;
 
     events.forEach((event) => {
-      const delayMs = event.ticksFromStart * msPerTick;
-      
-      setTimeout(() => {
-        // Play the clip
+      const rawTick = event.playTickFromStart ?? event.ticksFromStart ?? 0;
+      const eventTick = Math.max(0, Math.round(Number(rawTick) || 0));
+      const absoluteTick = baseTick + eventTick;
+
+      const id = Tone.Transport.scheduleOnce(() => {
         if (event.type === 'stop') {
           const entry = this._clipIndex.get(event.clipId);
           if (entry) {
             this.stopColumn(entry.column);
           }
         } else {
-          this._playClipOverlaySync(event.clipId, Tone.now());
+          this.triggerClip(event.clipId);
         }
         onEventPlay(event.clipId);
-      }, delayMs);
+      }, Tone.Ticks(absoluteTick));
+
+      this._scheduledEventIds.add(id);
     });
   }
 
@@ -829,7 +837,8 @@ export class AudioEngine {
 
       // Schedule all events
       events.forEach((event) => {
-        const timeInSeconds = event.ticksFromStart * secondsPerTick;
+        const rawTick = event.playTickFromStart ?? event.ticksFromStart ?? 0;
+        const timeInSeconds = Math.max(0, Number(rawTick) || 0) * secondsPerTick;
         const entry = this._clipIndex.get(event.clipId);
         
         if (!entry || !entry.clip?.source) return;
@@ -843,6 +852,8 @@ export class AudioEngine {
             const player = new Tone.Player(cachedBuffer).connect(master);
             player.start(timeInSeconds);
           }
+        } else if (clip.source.kind === 'generated') {
+          playGeneratedOneShot(clip.source.generator, { destination: master, time: timeInSeconds });
         }
       });
 
