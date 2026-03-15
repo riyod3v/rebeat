@@ -611,12 +611,9 @@ const App = () => {
     // Calculate total duration and stop after
     const ticksPerBeat = 480;
     const msPerTick = (60000 / lastRecording.bpm) / ticksPerBeat;
-    const maxEventTick = Math.max(
-      ...lastRecording.events.map((event) => event.playTickFromStart ?? event.ticksFromStart ?? 0),
-      0,
-    );
-    // Add one bar tail so loop clips can ring out naturally.
-    const durationMs = (maxEventTick + (ticksPerBeat * 4)) * msPerTick;
+    const recordedDurationTicks = Math.max(0, Number(lastRecording.durationTicks) || 0);
+    // Keep playback state active for full recorded timeline plus a short tail.
+    const durationMs = (recordedDurationTicks + ticksPerBeat) * msPerTick;
 
     setTimeout(() => {
       setIsPlayingRecording(false);

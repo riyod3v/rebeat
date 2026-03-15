@@ -703,20 +703,54 @@ export class AudioEngine {
       const eventTick = Math.max(0, Math.round(Number(rawTick) || 0));
       const absoluteTick = baseTick + eventTick;
 
-      const id = Tone.Transport.scheduleOnce(() => {
-        if (event.type === 'stop') {
-          const entry = this._clipIndex.get(event.clipId);
-          if (entry) {
-            this.stopColumn(entry.column);
-          }
-        } else {
-          this.triggerClip(event.clipId);
-        }
+      const id = Tone.Transport.scheduleOnce((audioTime) => {
+        this._triggerClipForPlayback(event.clipId, {
+          eventType: event.type,
+          transportTick: absoluteTick,
+          audioTime,
+        });
         onEventPlay(event.clipId);
       }, Tone.Ticks(absoluteTick));
 
       this._scheduledEventIds.add(id);
     });
+  }
+
+  _triggerClipForPlayback(clipId, { eventType, transportTick, audioTime }) {
+    const entry = this._clipIndex.get(clipId);
+    if (!entry) return;
+
+    const { clip, column } = entry;
+    const type = eventType ?? clip.type;
+
+    if (type === 'stop') {
+      const active = this._activeLoopByColumn.get(column);
+      const queued = this._queuedLoopByColumn.get(column);
+      if (queued) {
+        this._queuedLoopByColumn.delete(column);
+        this._setClipState(queued, 'idle');
+      }
+      if (active) {
+        this._stopLoopAt(active, { transportTick, audioTime });
+        this._activeLoopByColumn.delete(column);
+      }
+      return;
+    }
+
+    if (type === 'oneShot') {
+      this._playClipOverlaySync(clipId, audioTime);
+      return;
+    }
+
+    if (type === 'loop') {
+      const currentActive = this._activeLoopByColumn.get(column);
+      if (currentActive && currentActive !== clipId) {
+        this._stopLoopAt(currentActive, { transportTick, audioTime });
+      }
+      this._queuedLoopByColumn.delete(column);
+      this._activeLoopByColumn.set(column, clipId);
+      this._startLoopAt(clipId, { transportTick, audioTime });
+    }
   }
 
   /**
@@ -795,12 +829,10 @@ export class AudioEngine {
     const secondsPerBeat = 60 / bpm;
     const secondsPerTick = secondsPerBeat / ticksPerBeat;
     
-    // Find the last event and add some padding for the audio to play
-    const lastEventTicks = Math.max(...events.map(e => e.ticksFromStart));
-    // Add 2 bars worth of time for loops to play
-    const barsToAdd = 2;
-    const ticksPerBar = ticksPerBeat * 4; // Assuming 4/4 time
-    const totalTicks = lastEventTicks + (ticksPerBar * barsToAdd);
+    // Render through the full recorded duration so sustained loops keep running.
+    const recordedDurationTicks = Math.max(0, Number(recording.durationTicks) || 0);
+    const lastEventTicks = Math.max(...events.map((e) => (e.playTickFromStart ?? e.ticksFromStart ?? 0)), 0);
+    const totalTicks = Math.max(recordedDurationTicks, lastEventTicks + ticksPerBeat);
     const durationSeconds = totalTicks * secondsPerTick;
 
     onProgress(0.1);
@@ -834,6 +866,18 @@ export class AudioEngine {
       
       // Create a master gain
       const master = new Tone.Gain(0.9).toDestination();
+      const activeLoopByColumn = new Map();
+
+      const stopLoopPlayer = (column, atTime) => {
+        const active = activeLoopByColumn.get(column);
+        if (!active) return;
+        try {
+          active.stop(atTime);
+        } catch {
+          // ignore
+        }
+        activeLoopByColumn.delete(column);
+      };
 
       // Schedule all events
       events.forEach((event) => {
@@ -842,9 +886,29 @@ export class AudioEngine {
         const entry = this._clipIndex.get(event.clipId);
         
         if (!entry || !entry.clip?.source) return;
-        if (event.type === 'stop') return; // Skip stop events for rendering
 
         const clip = entry.clip;
+
+        if (event.type === 'stop') {
+          stopLoopPlayer(entry.column, timeInSeconds);
+          return;
+        }
+
+        if (clip.type === 'loop') {
+          stopLoopPlayer(entry.column, timeInSeconds);
+
+          if (clip.source.kind === 'url') {
+            const cachedBuffer = bufferCache.get(clip.source.url);
+            if (cachedBuffer) {
+              const player = new Tone.Player(cachedBuffer).connect(master);
+              player.loop = true;
+              player.autostart = false;
+              player.start(timeInSeconds);
+              activeLoopByColumn.set(entry.column, player);
+            }
+          }
+          return;
+        }
 
         if (clip.source.kind === 'url') {
           const cachedBuffer = bufferCache.get(clip.source.url);
@@ -854,6 +918,15 @@ export class AudioEngine {
           }
         } else if (clip.source.kind === 'generated') {
           playGeneratedOneShot(clip.source.generator, { destination: master, time: timeInSeconds });
+        }
+      });
+
+      // Stop any still-running loops at the end of the rendered timeline.
+      activeLoopByColumn.forEach((player) => {
+        try {
+          player.stop(durationSeconds);
+        } catch {
+          // ignore
         }
       });
 
