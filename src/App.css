@@ -107,7 +107,7 @@
     backdrop-filter: none;
     pointer-events: none;
     padding: 0;
-    display: block;
+    display: block !important;
     z-index: 1;
   }
 }

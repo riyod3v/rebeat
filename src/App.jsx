@@ -881,10 +881,14 @@ const App = () => {
           gameActive={gameActive}
         />
         
-        {appMode === 'game' && showLeaderboard && (
-          <div className="lb-mobile-overlay" onClick={() => setShowLeaderboard(false)}>
+        {appMode === 'game' && (
+          <div 
+            className="lb-mobile-overlay" 
+            onClick={() => setShowLeaderboard(false)}
+            style={{ display: showLeaderboard ? 'flex' : 'none' }}
+          >
             <Leaderboard 
-              isVisible={showLeaderboard} 
+              isVisible={true} 
               currentScore={gameScore}
               currentUser={currentUser}
               onClose={() => setShowLeaderboard(false)}
