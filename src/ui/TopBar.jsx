@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FaUser, FaPlay, FaStop, FaGamepad, FaRedo, FaQuestionCircle, FaDownload, FaTrash } from 'react-icons/fa';
+import { FaUser, FaPlay, FaStop, FaGamepad, FaRedo, FaQuestionCircle, FaDownload, FaTrash, FaMusic } from 'react-icons/fa';
 import { GamePhase } from './padStates';
 
 export function TopBar({
@@ -23,7 +23,7 @@ export function TopBar({
   onClearRecording,
   onShowTutorial,
   onShowAccount,
-  onShowUserData,
+  onShowRecordings,
   onToggleLeaderboard,
   onRestartGame,
   currentUser = null,
@@ -195,6 +195,19 @@ export function TopBar({
           </div>
         )}
 
+        {/* ── Desktop: recordings button (only when logged in) ── */}
+        {currentUser && (
+          <button
+            type="button"
+            className="lp-btn lp-btn--recordings lp-desktop-only"
+            onClick={onShowRecordings}
+            aria-label="My Recordings"
+            title="My Recordings"
+          >
+            <FaMusic />
+          </button>
+        )}
+
         {/* ── Desktop: account icon ── */}
         <button
           type="button"
@@ -280,15 +293,24 @@ export function TopBar({
                     </button>
                   </>
                 )}
+                
+                {currentUser && (
+                  <button
+                    type="button"
+                    className="lp-hamburger-item"
+                    onClick={act(onShowRecordings)}
+                    role="menuitem"
+                  >
+                    <span className="lp-hi-icon"><FaMusic /></span>
+                    <span className="lp-hi-label">My Recordings</span>
+                  </button>
+                )}
               </>
             )}
 
-            {/* Game mode hamburger items */}
+            {/* Game mode items */}
             {isGameMode && (
               <>
-                {/* Section label */}
-                <div className="lp-hi-section-label">GAME</div>
-
                 {/* Start Game — only shown when ready */}
                 {gamePhase === GamePhase.ready && (
                   <button

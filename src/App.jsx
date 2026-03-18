@@ -11,6 +11,7 @@ import { TutorialModal } from './ui/TutorialModal';
 import { AccountModal } from './ui/AccountModal';
 import { RegistrationModal } from './ui/RegistrationModal';
 import { Leaderboard } from './ui/Leaderboard';
+import { RecordingsModal } from './ui/RecordingsModal';
 import { supabase } from './services/supabaseClient';
 import { logger } from './utils/logger';
 
@@ -64,7 +65,8 @@ const App = () => {
   // =========================================================================
   const [showAccount, setShowAccount] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
-  const [showLeaderboard, setShowLeaderboard] = useState(false); // Hidden by default, shown when user clicks leaderboard button
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showRecordings, setShowRecordings] = useState(false); // Hidden by default, shown when user clicks leaderboard button
   const [currentUser, setCurrentUser] = useState(null); // null = logged out
   
   // Cache playable clip IDs
@@ -816,6 +818,7 @@ const App = () => {
         onClearRecording={handleClearRecording}
         onShowTutorial={() => setShowTutorial(true)}
         onShowAccount={() => setShowAccount(true)}
+        onShowRecordings={() => setShowRecordings(true)}
         onToggleLeaderboard={() => setShowLeaderboard(!showLeaderboard)}
         currentUser={currentUser}
       />
@@ -880,6 +883,7 @@ const App = () => {
 
       {showRegistration && (
         <RegistrationModal
+          isVisible={showRegistration}
           onClose={() => setShowRegistration(false)}
           onOpenAccount={() => {
             setShowRegistration(false);
@@ -889,6 +893,14 @@ const App = () => {
             setShowRegistration(false);
             setShowAccount('register');
           }}
+        />
+      )}
+
+      {showRecordings && (
+        <RecordingsModal
+          isVisible={showRecordings}
+          onClose={() => setShowRecordings(false)}
+          currentUser={currentUser}
         />
       )}
 
