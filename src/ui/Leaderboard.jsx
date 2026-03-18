@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FaTrophy, FaSync, FaTimes, FaMedal } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
+import { logger } from '../utils/logger';
 import './Leaderboard.css';
 
 const Leaderboard = ({ isVisible, currentScore, currentUser, onClose }) => {
@@ -23,7 +24,7 @@ const Leaderboard = ({ isVisible, currentScore, currentUser, onClose }) => {
         .limit(10);
 
       if (error) {
-        console.error('Error fetching leaderboard:', error);
+        logger.warn('Leaderboard view not available, falling back to profiles table', { error });
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('id, username, high_score')
@@ -32,7 +33,7 @@ const Leaderboard = ({ isVisible, currentScore, currentUser, onClose }) => {
           .limit(10);
           
         if (profileError) {
-          console.error('Error fetching profiles:', profileError);
+          logger.error('Error fetching profiles for leaderboard', profileError);
           return;
         }
         
@@ -49,7 +50,7 @@ const Leaderboard = ({ isVisible, currentScore, currentUser, onClose }) => {
 
       setLeaderboardData(data || []);
     } catch (err) {
-      console.error('Failed to fetch leaderboard:', err);
+      logger.error('Failed to fetch leaderboard', err);
     } finally {
       setLoading(false);
     }

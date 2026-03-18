@@ -15,6 +15,7 @@ export function TopBar({
   isRecording = false,
   onToggleRecord,
   hasRecording = false,
+  recordingDuration = 0,
   isPlayingRecording = false,
   isExporting = false,
   onPlayRecording,
@@ -107,7 +108,7 @@ export function TopBar({
               disabled={isPlayingRecording}
             >
               <span className="lp-record-dot" />
-              {isRecording ? 'Stop Rec' : 'Record'}
+              {isRecording ? `Recording ${recordingDuration}s` : 'Record'}
             </button>
             {hasRecording && !isRecording && (
               <>
@@ -118,7 +119,7 @@ export function TopBar({
                   disabled={isPlayingRecording || isExporting}
                   title="Play recording"
                 >
-                  <FaPlay /> Play Rec
+                  <FaPlay /> Play ({recordingDuration}s)
                 </button>
                 <button
                   className={`lp-btn lp-btn--download ${isExporting ? 'lp-btn--download-active' : ''}`}

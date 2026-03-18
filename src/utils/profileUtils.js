@@ -1,4 +1,5 @@
 import { supabase } from '../services/supabaseClient';
+import { logger } from './logger';
 
 // Refresh user profile data from Supabase
 export const refreshUserProfile = async (userId, setCurrentUser) => {
@@ -10,7 +11,7 @@ export const refreshUserProfile = async (userId, setCurrentUser) => {
       .single();
       
     if (error) {
-      console.error('Error refreshing profile:', error);
+      logger.error('Error refreshing profile', error, { userId });
       return;
     }
     
@@ -20,6 +21,6 @@ export const refreshUserProfile = async (userId, setCurrentUser) => {
       totalRecordings: profileData.total_recordings
     }));
   } catch (err) {
-    console.error('Failed to refresh profile:', err);
+    logger.error('Failed to refresh profile', err, { userId });
   }
 };
