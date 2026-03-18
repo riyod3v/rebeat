@@ -85,12 +85,39 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* ── Leaderboard Overlay (Modal style for mobile/tablet) ── */
+.lb-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* On desktop, remove the overlay styling and let it be a sidebar */
+@media (min-width: 1025px) {
+  .lb-mobile-overlay {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    backdrop-filter: none;
+    pointer-events: none;
+    padding: 0;
+    display: block;
+    z-index: 1;
+  }
+}
+
 .lp-main {
   flex: 1;
   min-height: 0;
   overflow: hidden;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: 8px 12px;
   position: relative;

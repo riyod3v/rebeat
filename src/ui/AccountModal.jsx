@@ -3,9 +3,12 @@ import { FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 
 // ── AccountModal ────────────────────────────────────────────────────────────
-export function AccountModal({ onClose, onLogin, onLogout, currentUser = null }) {
+export function AccountModal({ onClose, onLogin, onLogout, currentUser = null, initialView = null }) {
   // If user is already logged in, go straight to profile view
-  const [view, setView]                       = useState(currentUser ? 'profile' : 'login');
+  // Otherwise use initialView if provided, or default to 'login'
+  const [view, setView] = useState(
+    currentUser ? 'profile' : (initialView || 'login')
+  );
   const [registeredEmail, setRegisteredEmail] = useState('');
 
   const handleRegisterSuccess = (email) => {
@@ -70,7 +73,7 @@ function ProfileView({ user, onLogout, onClose }) {
         </div>
         <div className="am-profile-stat__divider" />
         <div className="am-profile-stat">
-          <span className="am-profile-stat__value">{user.audioRecords?.length ?? 0}</span>
+          <span className="am-profile-stat__value">{user.totalRecordings ?? 0}</span>
           <span className="am-profile-stat__label">Recordings</span>
         </div>
       </div>

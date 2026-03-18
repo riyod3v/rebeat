@@ -5,6 +5,11 @@ import { nextQuantizedTick, parseQuantizationToTicks } from './quantization';
 const LOOP_STOP_FADE_SECONDS = 0.03;
 const LOOP_START_FADE_SECONDS = 0.01;
 
+// Helper function to clean URLs - encode special characters to prevent browser issues
+function cleanAudioUrl(url) {
+  return url.replace(/#/g, '%23').replace(/&/g, '%26');
+}
+
 function clampNumber(value, { min, max }) {
   const n = Number(value);
   if (Number.isNaN(n)) return min;
@@ -91,7 +96,8 @@ export class AudioEngine {
     const urls = [];
     for (const { clip } of this._clipIndex.values()) {
       if (clip.source?.kind === 'url' && clip.source.url) {
-        urls.push(clip.source.url);
+        const cleanUrl = cleanAudioUrl(clip.source.url);
+        urls.push(cleanUrl);
       }
     }
     if (urls.length === 0) return;
@@ -318,7 +324,7 @@ export class AudioEngine {
     }
 
     if (clip.source?.kind === 'url') {
-      const player = new Tone.Player(clip.source.url);
+      const player = new Tone.Player(cleanAudioUrl(clip.source.url));
       player.loop = true;
       player.autostart = false;
       player.connect(gain);
@@ -516,7 +522,7 @@ export class AudioEngine {
     const now = Tone.now();
 
     if (clip.source.kind === 'url') {
-      const player = new Tone.Player(clip.source.url);
+      const player = new Tone.Player(cleanAudioUrl(clip.source.url));
       player.loop = false;
       player.connect(this._master);
       
@@ -572,7 +578,7 @@ export class AudioEngine {
     const now = Tone.now();
 
     if (clip.source.kind === 'url') {
-      const player = new Tone.Player(clip.source.url);
+      const player = new Tone.Player(cleanAudioUrl(clip.source.url));
       player.loop = false; // Play once, not continuously
       player.connect(this._master);
       
@@ -770,7 +776,7 @@ export class AudioEngine {
     const audioTime = time ?? Tone.now();
 
     if (clip.source.kind === 'url') {
-      const player = new Tone.Player(clip.source.url);
+      const player = new Tone.Player(cleanAudioUrl(clip.source.url));
       player.loop = false;
       player.connect(this._master);
       
@@ -842,7 +848,7 @@ export class AudioEngine {
     for (const event of events) {
       const entry = this._clipIndex.get(event.clipId);
       if (entry?.clip?.source?.kind === 'url') {
-        urlsNeeded.add(entry.clip.source.url);
+        urlsNeeded.add(cleanAudioUrl(entry.clip.source.url));
       }
     }
 
@@ -898,7 +904,7 @@ export class AudioEngine {
           stopLoopPlayer(entry.column, timeInSeconds);
 
           if (clip.source.kind === 'url') {
-            const cachedBuffer = bufferCache.get(clip.source.url);
+            const cachedBuffer = bufferCache.get(cleanAudioUrl(clip.source.url));
             if (cachedBuffer) {
               const player = new Tone.Player(cachedBuffer).connect(master);
               player.loop = true;

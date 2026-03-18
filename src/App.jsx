@@ -9,8 +9,8 @@ import { TopBar } from './ui/TopBar';
 import { LaunchpadGrid } from './ui/LaunchpadGrid';
 import { TutorialModal } from './ui/TutorialModal';
 import { AccountModal } from './ui/AccountModal';
+import { RegistrationModal } from './ui/RegistrationModal';
 import { Leaderboard } from './ui/Leaderboard';
-import { UserData } from './ui/UserData';
 import { supabase } from './services/supabaseClient';
 
 // Fixed tempo - 130 BPM
@@ -61,10 +61,11 @@ const App = () => {
   // ACCOUNT / AUTH STATE
   // =========================================================================
   const [showAccount, setShowAccount] = useState(false);
-  const [showUserData, setShowUserData] = useState(false);
+  const [showRegistration, setShowRegistration] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false); // Hidden by default, shown when user clicks leaderboard button
   const [currentUser, setCurrentUser] = useState(null); // null = logged out
   
-  // Track playable clips for game selection
+  // Cache playable clip IDs
   const playableClipIds = useRef([]);
   
   // Ref to track if game sequence should be aborted
@@ -97,9 +98,6 @@ const App = () => {
     engine.setTimeSignature(project.global.timeSignature ?? [4, 4]);
     engine.setQuantization(FIXED_QUANTIZATION);
 
-    // Cache playable clip IDs
-    playableClipIds.current = engine.getPlayableClipIds();
-
     return () => {
       engine.dispose();
       engineRef.current = null;
@@ -112,7 +110,6 @@ const App = () => {
     if (!engine) return;
     engine.loadProject(project);
     engine.setTimeSignature(project.global.timeSignature ?? [4, 4]);
-    playableClipIds.current = engine.getPlayableClipIds();
   }, [project]);
 
   // =========================================================================
@@ -150,6 +147,18 @@ const App = () => {
 
     return { unifiedPads: pads, gridRows: totalRows };
   }, [project, clipStatesById]);
+
+  // Sync playable clip IDs — only include clips that have a visible pad in the grid
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const allPlayableIds = engine.getPlayableClipIds();
+    const visiblePadIds = new Set();
+    for (const pad of unifiedPads.values()) {
+      if (pad.id) visiblePadIds.add(pad.id);
+    }
+    playableClipIds.current = allPlayableIds.filter(id => visiblePadIds.has(id));
+  }, [unifiedPads]);
 
   const columnLabels = useMemo(() => {
     const labels = Array(project.grid.columns).fill('');
@@ -255,7 +264,12 @@ const App = () => {
   // Generate a new sequence for the current level
   const generateSequence = useCallback((level) => {
     const availableClips = playableClipIds.current;
-    if (availableClips.length === 0) return [];
+    if (availableClips.length === 0) {
+      console.warn('No playable clips found for game!');
+      return [];
+    }
+    
+    console.log(`Generating sequence level ${level} from ${availableClips.length} available clips`);
     
     const sequence = [];
     for (let i = 0; i < level; i++) {
@@ -273,6 +287,15 @@ const App = () => {
     // Mark sequence as active
     gameAbortRef.current = false;
     setGamePhase(GamePhase.demonstrating);
+
+    // Debug: Log the sequence and check if all clips have pads
+    console.log('Demo sequence:', sequence);
+    sequence.forEach(clipId => {
+      const hasPad = Array.from(unifiedPads.values()).some(pad => pad.id === clipId);
+      if (!hasPad) {
+        console.warn(`Demo sequence contains clip ${clipId} but no pad found in grid!`);
+      }
+    });
 
     for (let i = 0; i < sequence.length; i++) {
       // Check if aborted
@@ -360,6 +383,13 @@ const App = () => {
     const engine = engineRef.current;
     if (!engine) return;
 
+    // Debug: Check if this clipId has a corresponding pad
+    const hasPad = Array.from(unifiedPads.values()).some(pad => pad.id === clipId);
+    if (!hasPad) {
+      console.warn(`Game clicked clip ${clipId} but no pad found in grid! Available pads:`, 
+        Array.from(unifiedPads.values()).map(p => p.id));
+    }
+
     const expectedClipId = gameSequence[playerProgress];
     const isCorrect = clipId === expectedClipId;
 
@@ -404,6 +434,12 @@ const App = () => {
       // Save high score to Supabase if user is logged in
       if (currentUser && gameScore > 0) {
         saveHighScore(gameScore, gameLevel);
+        // Trigger leaderboard refresh after a short delay to ensure the score is saved
+        setTimeout(() => {
+          // This will cause the Leaderboard component to refetch data
+          setShowLeaderboard(false);
+          setTimeout(() => setShowLeaderboard(true), 100);
+        }, 500);
       }
 
       // Clear feedback after delay
@@ -418,7 +454,8 @@ const App = () => {
     if (!currentUser) return;
     
     try {
-      const { error } = await supabase
+      // Save to high_scores table
+      const { error: highScoreError } = await supabase
         .from('high_scores')
         .insert({
           user_id: currentUser.id,
@@ -426,11 +463,31 @@ const App = () => {
           level_reached: level
         });
         
-      if (error) {
-        // Error saving high score
+      if (highScoreError) {
+        console.error('Error saving high score:', highScoreError);
+      }
+
+      // Update profiles table with new high score if it's higher
+      if (score > (currentUser.highScore || 0)) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            high_score: score
+          })
+          .eq('id', currentUser.id);
+          
+        if (profileError) {
+          console.error('Error updating profile high score:', profileError);
+        } else {
+          // Update local state
+          setCurrentUser(prev => ({
+            ...prev,
+            highScore: score
+          }));
+        }
       }
     } catch (err) {
-      // Failed to save high score
+      console.error('Failed to save high score:', err);
     }
   }, [currentUser]);
 
@@ -502,6 +559,12 @@ const App = () => {
     if (!engine) return;
     const currentUserId = currentUser?.id ?? currentUser?.authId ?? null;
 
+    // Check if user is registered before allowing recording
+    if (!currentUserId && !isRecording) {
+      setShowRegistration(true);
+      return;
+    }
+
     if (isRecording) {
       // Stop recording and save the sequence
       const recording = engine.stopRecording();
@@ -554,9 +617,25 @@ const App = () => {
             });
             
           if (dbError) {
-            // Error saving recording metadata
+            console.error('Error saving recording metadata:', dbError);
           } else {
-            // Recording saved successfully
+            // Recording saved successfully, update total recordings count
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({
+                total_recordings: (currentUser.totalRecordings || 0) + 1
+              })
+              .eq('id', currentUserId);
+              
+            if (updateError) {
+              console.error('Error updating total recordings:', updateError);
+            } else {
+              // Update local state
+              setCurrentUser(prev => ({
+                ...prev,
+                totalRecordings: (prev.totalRecordings || 0) + 1
+              }));
+            }
           }
         } catch (err) {
           // Failed to save recording
@@ -702,15 +781,15 @@ const App = () => {
         onRestartGame={handleRestartGame}
         isRecording={isRecording}
         onToggleRecord={handleToggleRecord}
-        hasRecording={lastRecording && lastRecording.events.length > 0}
-        onPlayRecording={handlePlayRecording}
+        hasRecording={!!lastRecording}
         isPlayingRecording={isPlayingRecording}
         isExporting={isExporting}
+        onPlayRecording={handlePlayRecording}
         onDownloadRecording={handleDownloadRecording}
         onClearRecording={handleClearRecording}
         onShowTutorial={() => setShowTutorial(true)}
         onShowAccount={() => setShowAccount(true)}
-        onShowUserData={() => setShowUserData(!showUserData)}
+        onToggleLeaderboard={() => setShowLeaderboard(!showLeaderboard)}
         currentUser={currentUser}
       />
 
@@ -725,12 +804,13 @@ const App = () => {
         <AccountModal
           onClose={() => setShowAccount(false)}
           currentUser={currentUser}
+          initialView={showAccount === 'register' ? 'register' : null}
           onLogin={async (user) => {
             // Fetch user's profile from Supabase
             try {
               const { data: profileData, error } = await supabase
                 .from('profiles')
-                .select('id, username, avatar_url')
+                .select('id, username, avatar_url, high_score, total_recordings')
                 .eq('id', user.authId)
                 .single();
                 
@@ -740,6 +820,8 @@ const App = () => {
                 setCurrentUser({
                   ...user,
                   id: user.id ?? user.authId,
+                  highScore: 0,
+                  totalRecordings: 0
                 });
               } else {
                 // Merge auth data with profile data
@@ -747,7 +829,9 @@ const App = () => {
                   id: profileData.id,
                   username: profileData.username,
                   email: user.email,
-                  avatarUrl: profileData.avatar_url
+                  avatarUrl: profileData.avatar_url,
+                  highScore: profileData.high_score,
+                  totalRecordings: profileData.total_recordings
                 });
               }
             } catch (err) {
@@ -755,13 +839,28 @@ const App = () => {
               setCurrentUser({
                 ...user,
                 id: user.id ?? user.authId,
+                highScore: 0,
+                totalRecordings: 0
               });
             }
-            setShowAccount(false);
           }}
           onLogout={() => {
             setCurrentUser(null);
             setShowAccount(false);
+          }}
+        />
+      )}
+
+      {showRegistration && (
+        <RegistrationModal
+          onClose={() => setShowRegistration(false)}
+          onOpenAccount={() => {
+            setShowRegistration(false);
+            setShowAccount(true);
+          }}
+          onOpenRegistration={() => {
+            setShowRegistration(false);
+            setShowAccount('register');
           }}
         />
       )}
@@ -782,22 +881,15 @@ const App = () => {
           gameActive={gameActive}
         />
         
-        {appMode === 'game' && (
-          <Leaderboard 
-            isVisible={true} 
-            currentScore={gameScore}
-            currentUser={currentUser}
-          />
-        )}
-        
-        {showUserData && currentUser && (
-          <UserData 
-            isVisible={showUserData}
-            currentUser={currentUser}
-            onRefresh={() => {
-              // Trigger leaderboard refresh too
-            }}
-          />
+        {appMode === 'game' && showLeaderboard && (
+          <div className="lb-mobile-overlay" onClick={() => setShowLeaderboard(false)}>
+            <Leaderboard 
+              isVisible={showLeaderboard} 
+              currentScore={gameScore}
+              currentUser={currentUser}
+              onClose={() => setShowLeaderboard(false)}
+            />
+          </div>
         )}
       </main>
     </div>

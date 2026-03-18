@@ -36,7 +36,7 @@
         { "id": "bass_1", "name": "Shade", "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set01_-_2_-_Bass_original_sample_-_DS_BPT_130_bass_synth_shade_D.wav", "bars": 1 } },
         { "id": "bass_2", "name": "Sensualizando", "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set02_-_2_-_Bass_original_sample_-_DS_BPT_130_bass_synth_sensualizando_long_Dmin.wav", "bars": 1 } },
         { "id": "bass_3", "name": "Hood", "row": 2, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set03_-_2_-_Bass_original_sample_-_DS_BPG_130_bass_synth_hood_D.wav", "bars": 1 } },
-        { "id": "bass_4", "name": "Drama", "row": 3, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set04_-_2_-_Bass_original_sample_-_FL_BP_Bass_Loop_Synth_Drama_130_D%23m.wav", "bars": 1 } },
+        { "id": "bass_4", "name": "Drama", "row": 3, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set04_-_2_-_Bass_original_sample_-_FL_BP_Bass_Loop_Synth_Drama_130_D#m.wav", "bars": 1 } },
         { "id": "bass_5", "name": "Future", "row": 4, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set05_-_2_-_Bass_original_sample_-_DS_BP2_130_bass_synth_future_D.wav", "bars": 1 } },
         { "id": "bass_6", "name": "Core", "row": 5, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set06_-_2_-_Bass_original_sample_-_DS_BPS_130_bass_synth_core_Dmin.wav", "bars": 1 } },
         { "id": "bass_7", "name": "Madness", "row": 6, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set07_-_2_-_Bass_original_sample_-_DS_BP_130_bass_synth_loop_madness_Dmin.wav", "bars": 1 } },
@@ -116,7 +116,7 @@
         { "id": "lead_1", "name": "Fury", "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set01_-_8_-_Leads_original_sample_-_DS_BPS_130_synth_lead_fury_D.wav", "bars": 1 } },
         { "id": "lead_2", "name": "Cowbell Lie", "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set02_-_8_-_Drums_original_sample_-_DS_BPE_130_synth_lead_cowbell_lie_D.wav", "bars": 1 } },
         { "id": "lead_3", "name": "Burnt", "row": 2, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set03_-_8_-_Leads_original_sample_-_FL_BP_Synth_Loop_Lead_Burnt_130_Dm.wav", "bars": 1 } },
-        { "id": "lead_4", "name": "Hype", "row": 3, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set04_-_8_-_Leads_original_sample_-_DS_BPG_110_synth_lead_hype_D%23.wav", "bars": 1 } },
+        { "id": "lead_4", "name": "Hype", "row": 3, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set04_-_8_-_Leads_original_sample_-_DS_BPG_110_synth_lead_hype_D#.wav", "bars": 1 } },
         { "id": "lead_5", "name": "Pluck Rebolando", "row": 4, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set05_-_8_-_Synth_original_sample_-_DS_VBP_110_synth_pluck_rebolando_Dmin.wav", "bars": 1 } },
         { "id": "lead_6", "name": "Funk Lead", "row": 5, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set06_-_8_-_Leads_original_sample_-_DS_BF_130_synth_lead_funk_Dmin.wav", "bars": 1 } },
         { "id": "lead_7", "name": "Futuristic", "row": 6, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set07_-_8_-_Leads_original_sample_-_DS_BPG_150_synth_lead_futuristic_Dmin.wav", "bars": 1 } },
@@ -152,14 +152,14 @@
     { "id": "custom_30", "name": "Hell Perc", "column": 3, "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Perc/BF_130_D_Set08_-_4_-_Drums_original_sample_-_KMRBI_BP_130_percussion_loop_hell.wav", "bars": 1 } },
     { "id": "custom_40", "name": "Pouch Shaker", "column": 4, "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Shaker/BF_130_D_Set08_-_5_-_Drums_original_sample_-_AU_VBP_130_shaker_pouch.wav", "bars": 1 } },
     { "id": "custom_50", "name": "Sensualizando Wet", "column": 5, "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Vocal-Main/BF_130_D_Set08_-_6_-_Vocals_original_sample_-_DS_BPT_130_vocal_hook_male_sensualizando_chorus_wet_Dmin.wav", "bars": 1 } },
-    { "id": "custom_60", "name": "Ghost Brass", "column": 6, "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set08_-_8_-_Brass_%26_Winds_original_sample_-_DS_BP2_120_brass_synth_ghost_Dmin.wav", "bars": 1 } },
+    { "id": "custom_60", "name": "Ghost Brass", "column": 6, "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set08_-_8_-_Brass_&_Winds_original_sample_-_DS_BP2_120_brass_synth_ghost_Dmin.wav", "bars": 1 } },
     { "id": "custom_01", "name": "Full South", "column": 0, "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Drums/BF_130_D_Set08_-_1_-_Drums_original_sample_-_DS_BF_110_drum_full_south.wav", "bars": 1 } },
     { "id": "custom_11", "name": "Fury D", "column": 1, "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Bass/BF_130_D_Set08_-_2_-_Bass_original_sample_-_DS_BPS_130_bass_synth_fury_D.wav", "bars": 1 } },
     { "id": "custom_21", "name": "Lofi", "column": 2, "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Hat/BF_130_D_Set08_-_3_-_Drums_original_sample_-_DS_VP_108_drum_hat_loop_lofi.wav", "bars": 1 } },
     { "id": "custom_31", "name": "Hell", "column": 3, "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Perc/BF_130_D_Set08_-_4_-_Drums_original_sample_-_KMRBI_BP_130_percussion_loop_hell.wav", "bars": 1 } },
     { "id": "custom_41", "name": "Pouch", "column": 4, "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Shaker/BF_130_D_Set08_-_5_-_Drums_original_sample_-_AU_VBP_130_shaker_pouch.wav", "bars": 1 } },
     { "id": "custom_51", "name": "Wet Vocal", "column": 5, "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Vocal-Main/BF_130_D_Set08_-_6_-_Vocals_original_sample_-_DS_BPT_130_vocal_hook_male_sensualizando_chorus_wet_Dmin.wav", "bars": 1 } },
-    { "id": "custom_61", "name": "Ghost", "column": 6, "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set08_-_8_-_Brass_%26_Winds_original_sample_-_DS_BP2_120_brass_synth_ghost_Dmin.wav", "bars": 1 } },
-    { "id": "custom_70", "name": "Twisted", "column": 7, "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Vocal2/BF_130_D_Set08_-_7_-_Vocals_original_sample_-_DS_BPG_130_vocal_chop_twisted_C%23.wav", "bars": 1 } }
+    { "id": "custom_61", "name": "Ghost", "column": 6, "row": 1, "type": "loop", "source": { "kind": "url", "url": "/audio/Lead/BF_130_D_Set08_-_8_-_Brass_&_Winds_original_sample_-_DS_BP2_120_brass_synth_ghost_Dmin.wav", "bars": 1 } },
+    { "id": "custom_70", "name": "Twisted", "column": 7, "row": 0, "type": "loop", "source": { "kind": "url", "url": "/audio/Vocal2/BF_130_D_Set08_-_7_-_Vocals_original_sample_-_DS_BPG_130_vocal_chop_twisted_C#.wav", "bars": 1 } }
   ]
 }

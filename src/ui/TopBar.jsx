@@ -23,6 +23,7 @@ export function TopBar({
   onShowTutorial,
   onShowAccount,
   onShowUserData,
+  onToggleLeaderboard,
   onRestartGame,
   currentUser = null,
 }) {
@@ -300,6 +301,17 @@ export function TopBar({
                   </button>
                 )}
 
+                {/* Leaderboard Toggle */}
+                <button
+                  type="button"
+                  className="lp-hamburger-item"
+                  onClick={act(onToggleLeaderboard)}
+                  role="menuitem"
+                >
+                  <span className="lp-hi-icon">🏆</span>
+                  <span className="lp-hi-label">Leaderboard</span>
+                </button>
+
                 {/* Play Again — only shown after game over; restarts from level 1 immediately */}
                 {gamePhase === GamePhase.gameOver && (
                   <button
@@ -312,16 +324,6 @@ export function TopBar({
                     <span className="lp-hi-label">Play Again</span>
                   </button>
                 )}
-
-                <button
-                  type="button"
-                  className="lp-hamburger-item"
-                  onClick={act(onShowTutorial)}
-                  role="menuitem"
-                >
-                  <span className="lp-hi-icon"><FaQuestionCircle /></span>
-                  <span className="lp-hi-label">Tutorial</span>
-                </button>
               </>
             )}
 
@@ -342,22 +344,17 @@ export function TopBar({
                 {currentUser ? currentUser.username : 'Login / Register'}
               </span>
             </button>
-            
-            {/* User Data — only show when logged in */}
-            {currentUser && (
-              <>
-                <div className="lp-hi-divider" />
-                <button
-                  type="button"
-                  className="lp-hamburger-item"
-                  onClick={act(onShowUserData)}
-                  role="menuitem"
-                >
-                  <span className="lp-hi-icon">📊</span>
-                  <span className="lp-hi-label">My Data</span>
-                </button>
-              </>
-            )}
+
+            {/* Tutorial */}
+            <button
+              type="button"
+              className="lp-hamburger-item"
+              onClick={act(onShowTutorial)}
+              role="menuitem"
+            >
+              <span className="lp-hi-icon"><FaQuestionCircle /></span>
+              <span className="lp-hi-label">Tutorial</span>
+            </button>
           </div>
         )}
       </div>
