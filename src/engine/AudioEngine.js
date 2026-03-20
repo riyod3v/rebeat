@@ -328,14 +328,11 @@ export class AudioEngine {
   }
 
   stopColumn(column) {
-    const active = thi, column) {
-    const loopEnd = '1m';
-    
-    // Connect to column gain instead of master
-    const columnGain = this._columnGains.get(column) || this._master;
+    const active = this._activeLoopByColumn.get(column);
+    const queued = this._queuedLoopByColumn.get(column);
 
-    const gain = new Tone.Gain(1);
-    gain.connect(columnGainck('1m');
+    // Always let loops finish the bar when stopping.
+    const tick = this._nextTick('1m');
 
     if (queued) {
       this._queuedLoopByColumn.delete(column);
@@ -369,11 +366,14 @@ export class AudioEngine {
     this._onClipStateChange(clipId, state);
   }
 
-  _createLoopNode(clip) {
+  _createLoopNode(clip, column) {
     const loopEnd = '1m';
+    
+    // Connect to column gain instead of master
+    const columnGain = this._columnGains.get(column) || this._master;
 
     const gain = new Tone.Gain(1);
-    gain.connect(this._master);
+    gain.connect(columnGain);
     this._loopGainsByClipId.set(clip.id, gain);
 
     if (clip.source?.kind === 'generated') {
@@ -422,28 +422,24 @@ export class AudioEngine {
             gain.gain.rampTo(1, LOOP_START_FADE_SECONDS, audioTime);
             // Start immediately at the scheduled audio time
             player.start(audioTime);
-    // Get column info
-    const entry = this._clipIndex.get(clip.id);
-    const columnGain = entry ? (this._columnGains.get(entry.column) || this._master) : this._master;
+          },
+          stop: ({ transportTick, audioTime }) => {
+            void transportTick;
+            gain.gain.rampTo(0, LOOP_STOP_FADE_SECONDS, audioTime);
+            // Stop after fade
+            try {
+              player.stop(audioTime + LOOP_STOP_FADE_SECONDS + 0.01);
+            } catch {
+              try { player.stop(); } catch { /* ignore */ }
+            }
+          },
+          dispose: () => player.dispose(),
+        },
+      };
+    }
 
-    this._scheduleAtTick(tick, ({ audioTime }) => {
-      this._setClipState(clip.id, 'playing');
-
-      // Calculate duration based on clip bars
-      const bars = typeof clip.source?.bars === 'number' ? clip.source.bars : 0.5;
-      const barSeconds = Tone.Time('1m').toSeconds();
-      const durationMs = Math.max(200, Math.floor(bars * barSeconds * 1000));
-      // Add buffer time for disposal (100ms after playback ends)
-      const disposeMs = durationMs + 100;
-
-      if (clip.source?.kind === 'generated') {
-        playGeneratedOneShot(clip.source.generator, { destination: columnGain, time: audioTime });
-      } else if (clip.source?.kind === 'url') {
-        const cleanUrl = cleanAudioUrl(clip.source.url);
-        const cachedBuffer = this._bufferCache.get(cleanUrl);
-        const player = cachedBuffer
-          ? new Tone.Player(cachedBuffer).connect(columnGain)
-          : new Tone.Player(cleanUrl).connect(columnGain});
+    // Fallback: silent generated loop.
+    const node = createGeneratedLoop('default', { loopEnd });
     node.output.connect(gain);
     return {
       node: {
@@ -467,6 +463,10 @@ export class AudioEngine {
     const tick = this._nextTick();
     this._setClipState(clip.id, 'queued');
 
+    // Get column info
+    const entry = this._clipIndex.get(clip.id);
+    const columnGain = entry ? (this._columnGains.get(entry.column) || this._master) : this._master;
+
     this._scheduleAtTick(tick, ({ audioTime }) => {
       this._setClipState(clip.id, 'playing');
 
@@ -478,13 +478,13 @@ export class AudioEngine {
       const disposeMs = durationMs + 100;
 
       if (clip.source?.kind === 'generated') {
-        playGeneratedOneShot(clip.source.generator, { destination: this._master, time: audioTime });
+        playGeneratedOneShot(clip.source.generator, { destination: columnGain, time: audioTime });
       } else if (clip.source?.kind === 'url') {
         const cleanUrl = cleanAudioUrl(clip.source.url);
         const cachedBuffer = this._bufferCache.get(cleanUrl);
         const player = cachedBuffer
-          ? new Tone.Player(cachedBuffer).connect(this._master)
-          : new Tone.Player(cleanUrl).connect(this._master);
+          ? new Tone.Player(cachedBuffer).connect(columnGain)
+          : new Tone.Player(cleanUrl).connect(columnGain);
         player.start(audioTime);
         // Dispose after calculated duration + buffer
         setTimeout(() => {
