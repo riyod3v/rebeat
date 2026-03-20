@@ -107,9 +107,9 @@
   overflow: hidden;
   /*
    * Explicit width so children (grid, col-headers) can resolve width:100%.
-   * Wider ratio (1.0 instead of 0.8) for more spacious buttons.
+   * Wider ratio (1.5 instead of 0.8) for more spacious buttons.
    */
-  width: calc((100vh - 160px) * 1.0 + 30px);
+  width: calc((100vh - 160px) * 1.5 + 30px);
   max-width: calc(100vw - 32px);
 }
 
