@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FaUser, FaPlay, FaStop, FaGamepad, FaRedo, FaQuestionCircle, FaDownload, FaTrash } from 'react-icons/fa';
+import { FaUser, FaPlay, FaStop, FaGamepad, FaRedo, FaQuestionCircle, FaDownload, FaTrash, FaMusic } from 'react-icons/fa';
 import { GamePhase } from './padStates';
 
 export function TopBar({
@@ -15,6 +15,7 @@ export function TopBar({
   isRecording = false,
   onToggleRecord,
   hasRecording = false,
+  recordingDuration = 0,
   isPlayingRecording = false,
   isExporting = false,
   onPlayRecording,
@@ -22,7 +23,8 @@ export function TopBar({
   onClearRecording,
   onShowTutorial,
   onShowAccount,
-  onShowUserData,
+  onShowRecordings,
+  onToggleLeaderboard,
   onRestartGame,
   currentUser = null,
 }) {
@@ -106,7 +108,7 @@ export function TopBar({
               disabled={isPlayingRecording}
             >
               <span className="lp-record-dot" />
-              {isRecording ? 'Stop Rec' : 'Record'}
+              {isRecording ? `Recording ${recordingDuration}s` : 'Record'}
             </button>
             {hasRecording && !isRecording && (
               <>
@@ -117,7 +119,7 @@ export function TopBar({
                   disabled={isPlayingRecording || isExporting}
                   title="Play recording"
                 >
-                  <FaPlay /> Play Rec
+                  <FaPlay /> Play ({recordingDuration}s)
                 </button>
                 <button
                   className={`lp-btn lp-btn--download ${isExporting ? 'lp-btn--download-active' : ''}`}
@@ -191,6 +193,19 @@ export function TopBar({
               Tutorial
             </button>
           </div>
+        )}
+
+        {/* ── Desktop: recordings button (only when logged in) ── */}
+        {currentUser && (
+          <button
+            type="button"
+            className="lp-btn lp-btn--recordings lp-desktop-only"
+            onClick={onShowRecordings}
+            aria-label="My Recordings"
+            title="My Recordings"
+          >
+            <FaMusic />
+          </button>
         )}
 
         {/* ── Desktop: account icon ── */}
@@ -278,15 +293,24 @@ export function TopBar({
                     </button>
                   </>
                 )}
+                
+                {currentUser && (
+                  <button
+                    type="button"
+                    className="lp-hamburger-item"
+                    onClick={act(onShowRecordings)}
+                    role="menuitem"
+                  >
+                    <span className="lp-hi-icon"><FaMusic /></span>
+                    <span className="lp-hi-label">My Recordings</span>
+                  </button>
+                )}
               </>
             )}
 
-            {/* Game mode hamburger items */}
+            {/* Game mode items */}
             {isGameMode && (
               <>
-                {/* Section label */}
-                <div className="lp-hi-section-label">GAME</div>
-
                 {/* Start Game — only shown when ready */}
                 {gamePhase === GamePhase.ready && (
                   <button
@@ -300,6 +324,17 @@ export function TopBar({
                   </button>
                 )}
 
+                {/* Leaderboard Toggle */}
+                <button
+                  type="button"
+                  className="lp-hamburger-item"
+                  onClick={act(onToggleLeaderboard)}
+                  role="menuitem"
+                >
+                  <span className="lp-hi-icon">🏆</span>
+                  <span className="lp-hi-label">Leaderboard</span>
+                </button>
+
                 {/* Play Again — only shown after game over; restarts from level 1 immediately */}
                 {gamePhase === GamePhase.gameOver && (
                   <button
@@ -312,16 +347,6 @@ export function TopBar({
                     <span className="lp-hi-label">Play Again</span>
                   </button>
                 )}
-
-                <button
-                  type="button"
-                  className="lp-hamburger-item"
-                  onClick={act(onShowTutorial)}
-                  role="menuitem"
-                >
-                  <span className="lp-hi-icon"><FaQuestionCircle /></span>
-                  <span className="lp-hi-label">Tutorial</span>
-                </button>
               </>
             )}
 
@@ -342,22 +367,17 @@ export function TopBar({
                 {currentUser ? currentUser.username : 'Login / Register'}
               </span>
             </button>
-            
-            {/* User Data — only show when logged in */}
-            {currentUser && (
-              <>
-                <div className="lp-hi-divider" />
-                <button
-                  type="button"
-                  className="lp-hamburger-item"
-                  onClick={act(onShowUserData)}
-                  role="menuitem"
-                >
-                  <span className="lp-hi-icon">📊</span>
-                  <span className="lp-hi-label">My Data</span>
-                </button>
-              </>
-            )}
+
+            {/* Tutorial */}
+            <button
+              type="button"
+              className="lp-hamburger-item"
+              onClick={act(onShowTutorial)}
+              role="menuitem"
+            >
+              <span className="lp-hi-icon"><FaQuestionCircle /></span>
+              <span className="lp-hi-label">Tutorial</span>
+            </button>
           </div>
         )}
       </div>

@@ -85,12 +85,39 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* ── Leaderboard Overlay (Modal style for mobile/tablet) ── */
+.lb-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* On desktop, remove the overlay styling and let it be a sidebar */
+@media (min-width: 1025px) {
+  .lb-mobile-overlay {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    backdrop-filter: none;
+    pointer-events: none;
+    padding: 0;
+    display: block !important;
+    z-index: 1;
+  }
+}
+
 .lp-main {
   flex: 1;
   min-height: 0;
   overflow: hidden;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: 8px 12px;
   position: relative;
@@ -1081,26 +1108,34 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   TOPBAR ACCOUNT BUTTON
+   TOPBAR ACCOUNT & RECORDINGS BUTTONS
 ════════════════════════════════════════════════════════════════════════════ */
-.lp-btn--account {
+.lp-btn--account,
+.lp-btn--recordings {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  font-size: 20px;
+  background: rgba(255 255 255 / 0.08);
+  border: 1px solid rgba(255 255 255 / 0.25);
   border-radius: 50%;
-  border: 1.5px solid rgba(255 255 255 / 0.25);
-  background: rgba(255 255 255 / 0.06);
-  font-size: 1.1rem;
-  cursor: pointer;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   flex-shrink: 0;
 }
-.lp-btn--account:hover {
+.lp-btn--account:hover,
+.lp-btn--recordings:hover {
   background: rgba(255 255 255 / 0.14);
   border-color: rgba(255 255 255 / 0.5);
   box-shadow: 0 0 10px rgba(168 85 247 / 0.45);
+}
+.lp-btn--recordings {
+  margin-right: 12px;
+}
+.lp-btn--recordings:hover {
+  box-shadow: 0 0 10px rgba(46 213 115 / 0.45);
 }
 
 /* Avatar initial circle shown when logged in */

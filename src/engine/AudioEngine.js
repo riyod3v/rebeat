@@ -1,9 +1,26 @@
 import * as Tone from 'tone';
+import { logger } from '../utils/logger';
 import { createGeneratedLoop, playGeneratedOneShot } from '../audio/generatedClips';
 import { nextQuantizedTick, parseQuantizationToTicks } from './quantization';
 
 const LOOP_STOP_FADE_SECONDS = 0.03;
 const LOOP_START_FADE_SECONDS = 0.01;
+
+// Helper function to clean URLs - encode special characters to prevent browser issues
+function cleanAudioUrl(url) {
+  // Split the URL into path parts and encode only the filename
+  const lastSlashIndex = url.lastIndexOf('/');
+  if (lastSlashIndex === -1) {
+    // No slash, encode the whole thing
+    return encodeURIComponent(url);
+  }
+  
+  const path = url.substring(0, lastSlashIndex + 1);
+  const filename = url.substring(lastSlashIndex + 1);
+  
+  // Encode the filename, which handles #, &, and other special characters
+  return path + encodeURIComponent(filename);
+}
 
 function clampNumber(value, { min, max }) {
   const n = Number(value);
@@ -34,6 +51,8 @@ export class AudioEngine {
     this._isRecording = false;
     this._recordedEvents = [];       // Array of { clipId, ticksFromStart, position, timestamp }
     this._recordingStartTicks = 0;
+    this._bufferCache = new Map(); // Cache for preloaded audio buffers
+
   }
 
   dispose() {
@@ -91,25 +110,42 @@ export class AudioEngine {
     const urls = [];
     for (const { clip } of this._clipIndex.values()) {
       if (clip.source?.kind === 'url' && clip.source.url) {
-        urls.push(clip.source.url);
+        const cleanUrl = cleanAudioUrl(clip.source.url);
+        urls.push(cleanUrl);
       }
     }
     if (urls.length === 0) return;
     
-    console.log(`Preloading ${urls.length} audio samples...`);
-    try {
-      await Promise.all(urls.map(url => 
-        new Promise((resolve) => {
-          const buffer = new Tone.ToneAudioBuffer(url, resolve, () => {
-            console.warn(`Failed to load: ${url}`);
+    logger.info('Preloading audio samples', { count: urls.length });
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    const loadPromises = urls.map(url => 
+      new Promise((resolve) => {
+        const buffer = new Tone.ToneAudioBuffer(
+          url,
+          () => {
+            successCount++;
+            this._bufferCache.set(url, buffer); // Cache the loaded buffer
+            logger.debug('Loaded audio sample', { url });
             resolve();
-          });
-          void buffer;
-        })
-      ));
-      console.log('Audio samples preloaded!');
-    } catch (err) {
-      console.warn('Some samples failed to preload:', err);
+          },
+          (error) => {
+            failCount++;
+            logger.warn('Failed to load audio sample', { url, error: error?.message || 'Unknown error' });
+            resolve(); // Resolve anyway to not block other loads
+          }
+        );
+      })
+    );
+    
+    await Promise.all(loadPromises);
+    
+    if (successCount > 0) {
+      logger.info('Audio samples preloaded', { success: successCount, failed: failCount, total: urls.length });
+    } else {
+      logger.error('All audio samples failed to load', { failed: failCount, total: urls.length });
     }
   }
 
@@ -318,7 +354,11 @@ export class AudioEngine {
     }
 
     if (clip.source?.kind === 'url') {
-      const player = new Tone.Player(clip.source.url);
+      const cleanUrl = cleanAudioUrl(clip.source.url);
+      const cachedBuffer = this._bufferCache.get(cleanUrl);
+      const player = cachedBuffer 
+        ? new Tone.Player(cachedBuffer)
+        : new Tone.Player(cleanUrl);
       player.loop = true;
       player.autostart = false;
       player.connect(gain);
@@ -390,7 +430,11 @@ export class AudioEngine {
       if (clip.source?.kind === 'generated') {
         playGeneratedOneShot(clip.source.generator, { destination: this._master, time: audioTime });
       } else if (clip.source?.kind === 'url') {
-        const player = new Tone.Player(clip.source.url).connect(this._master);
+        const cleanUrl = cleanAudioUrl(clip.source.url);
+        const cachedBuffer = this._bufferCache.get(cleanUrl);
+        const player = cachedBuffer
+          ? new Tone.Player(cachedBuffer).connect(this._master)
+          : new Tone.Player(cleanUrl).connect(this._master);
         player.start(audioTime);
         // Dispose after calculated duration + buffer
         setTimeout(() => {
@@ -516,7 +560,7 @@ export class AudioEngine {
     const now = Tone.now();
 
     if (clip.source.kind === 'url') {
-      const player = new Tone.Player(clip.source.url);
+      const player = new Tone.Player(cleanAudioUrl(clip.source.url));
       player.loop = false;
       player.connect(this._master);
       
@@ -572,7 +616,7 @@ export class AudioEngine {
     const now = Tone.now();
 
     if (clip.source.kind === 'url') {
-      const player = new Tone.Player(clip.source.url);
+      const player = new Tone.Player(cleanAudioUrl(clip.source.url));
       player.loop = false; // Play once, not continuously
       player.connect(this._master);
       
@@ -770,7 +814,7 @@ export class AudioEngine {
     const audioTime = time ?? Tone.now();
 
     if (clip.source.kind === 'url') {
-      const player = new Tone.Player(clip.source.url);
+      const player = new Tone.Player(cleanAudioUrl(clip.source.url));
       player.loop = false;
       player.connect(this._master);
       
@@ -842,7 +886,7 @@ export class AudioEngine {
     for (const event of events) {
       const entry = this._clipIndex.get(event.clipId);
       if (entry?.clip?.source?.kind === 'url') {
-        urlsNeeded.add(entry.clip.source.url);
+        urlsNeeded.add(cleanAudioUrl(entry.clip.source.url));
       }
     }
 
@@ -853,7 +897,7 @@ export class AudioEngine {
         const buffer = await Tone.ToneAudioBuffer.fromUrl(url);
         bufferCache.set(url, buffer);
       } catch (e) {
-        console.warn('Failed to load buffer:', url, e);
+        logger.warn('Failed to load buffer for rendering', e, { url });
       }
     });
     await Promise.all(loadPromises);
@@ -868,56 +912,64 @@ export class AudioEngine {
       const master = new Tone.Gain(0.9).toDestination();
       const activeLoopByColumn = new Map();
 
-      const stopLoopPlayer = (column, atTime) => {
+      const stopLoopPlayer = (column, tick) => {
         const active = activeLoopByColumn.get(column);
         if (!active) return;
         try {
-          active.stop(atTime);
+          const stopTime = Tone.Ticks(tick).toSeconds();
+          active.stop(stopTime);
         } catch {
           // ignore
         }
         activeLoopByColumn.delete(column);
       };
 
-      // Schedule all events
+      // Schedule all events using Transport ticks for accurate timing
       events.forEach((event) => {
+        // Use playTickFromStart for accurate timing (this is the quantized time)
         const rawTick = event.playTickFromStart ?? event.ticksFromStart ?? 0;
-        const timeInSeconds = Math.max(0, Number(rawTick) || 0) * secondsPerTick;
+        const eventTick = Math.max(0, Math.round(Number(rawTick) || 0));
         const entry = this._clipIndex.get(event.clipId);
         
         if (!entry || !entry.clip?.source) return;
 
         const clip = entry.clip;
+        const eventType = event.type ?? clip.type;
 
-        if (event.type === 'stop') {
-          stopLoopPlayer(entry.column, timeInSeconds);
+        if (eventType === 'stop') {
+          stopLoopPlayer(entry.column, eventTick);
           return;
         }
 
-        if (clip.type === 'loop') {
-          stopLoopPlayer(entry.column, timeInSeconds);
+        if (eventType === 'loop' || clip.type === 'loop') {
+          stopLoopPlayer(entry.column, eventTick);
 
           if (clip.source.kind === 'url') {
-            const cachedBuffer = bufferCache.get(clip.source.url);
+            const cachedBuffer = bufferCache.get(cleanAudioUrl(clip.source.url));
             if (cachedBuffer) {
               const player = new Tone.Player(cachedBuffer).connect(master);
               player.loop = true;
-              player.autostart = false;
-              player.start(timeInSeconds);
+              player.sync().start(Tone.Ticks(eventTick));
               activeLoopByColumn.set(entry.column, player);
             }
+          } else if (clip.source.kind === 'generated') {
+            // For generated loops, schedule at the correct time
+            const startTime = Tone.Ticks(eventTick).toSeconds();
+            playGeneratedOneShot(clip.source.generator, { destination: master, time: startTime });
           }
           return;
         }
 
+        // One-shot samples - schedule using Transport
         if (clip.source.kind === 'url') {
-          const cachedBuffer = bufferCache.get(clip.source.url);
+          const cachedBuffer = bufferCache.get(cleanAudioUrl(clip.source.url));
           if (cachedBuffer) {
             const player = new Tone.Player(cachedBuffer).connect(master);
-            player.start(timeInSeconds);
+            player.sync().start(Tone.Ticks(eventTick));
           }
         } else if (clip.source.kind === 'generated') {
-          playGeneratedOneShot(clip.source.generator, { destination: master, time: timeInSeconds });
+          const startTime = Tone.Ticks(eventTick).toSeconds();
+          playGeneratedOneShot(clip.source.generator, { destination: master, time: startTime });
         }
       });
 
@@ -930,6 +982,7 @@ export class AudioEngine {
         }
       });
 
+      // Start transport at time 0
       transport.start(0);
     }, durationSeconds);
 

@@ -9,9 +9,11 @@ import { TopBar } from './ui/TopBar';
 import { LaunchpadGrid } from './ui/LaunchpadGrid';
 import { TutorialModal } from './ui/TutorialModal';
 import { AccountModal } from './ui/AccountModal';
+import { RegistrationModal } from './ui/RegistrationModal';
 import { Leaderboard } from './ui/Leaderboard';
-import { UserData } from './ui/UserData';
+import { RecordingsModal } from './ui/RecordingsModal';
 import { supabase } from './services/supabaseClient';
+import { logger } from './utils/logger';
 
 // Fixed tempo - 130 BPM
 const FIXED_BPM = 130;
@@ -52,6 +54,7 @@ const App = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [lastRecording, setLastRecording] = useState(null); // Holds recorded sequence
   const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [showTutorial, setShowTutorial] = useState(false);
   // Tutorial shown automatically only the FIRST time the user enters Game mode.
   // After that it only appears when the user manually clicks the "?" button.
@@ -61,10 +64,12 @@ const App = () => {
   // ACCOUNT / AUTH STATE
   // =========================================================================
   const [showAccount, setShowAccount] = useState(false);
-  const [showUserData, setShowUserData] = useState(false);
+  const [showRegistration, setShowRegistration] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showRecordings, setShowRecordings] = useState(false); // Hidden by default, shown when user clicks leaderboard button
   const [currentUser, setCurrentUser] = useState(null); // null = logged out
   
-  // Track playable clips for game selection
+  // Cache playable clip IDs
   const playableClipIds = useRef([]);
   
   // Ref to track if game sequence should be aborted
@@ -97,9 +102,6 @@ const App = () => {
     engine.setTimeSignature(project.global.timeSignature ?? [4, 4]);
     engine.setQuantization(FIXED_QUANTIZATION);
 
-    // Cache playable clip IDs
-    playableClipIds.current = engine.getPlayableClipIds();
-
     return () => {
       engine.dispose();
       engineRef.current = null;
@@ -112,7 +114,6 @@ const App = () => {
     if (!engine) return;
     engine.loadProject(project);
     engine.setTimeSignature(project.global.timeSignature ?? [4, 4]);
-    playableClipIds.current = engine.getPlayableClipIds();
   }, [project]);
 
   // =========================================================================
@@ -150,6 +151,18 @@ const App = () => {
 
     return { unifiedPads: pads, gridRows: totalRows };
   }, [project, clipStatesById]);
+
+  // Sync playable clip IDs — only include clips that have a visible pad in the grid
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const allPlayableIds = engine.getPlayableClipIds();
+    const visiblePadIds = new Set();
+    for (const pad of unifiedPads.values()) {
+      if (pad.id) visiblePadIds.add(pad.id);
+    }
+    playableClipIds.current = allPlayableIds.filter(id => visiblePadIds.has(id));
+  }, [unifiedPads]);
 
   const columnLabels = useMemo(() => {
     const labels = Array(project.grid.columns).fill('');
@@ -255,7 +268,12 @@ const App = () => {
   // Generate a new sequence for the current level
   const generateSequence = useCallback((level) => {
     const availableClips = playableClipIds.current;
-    if (availableClips.length === 0) return [];
+    if (availableClips.length === 0) {
+      logger.warn('No playable clips found for game!');
+      return [];
+    }
+    
+    logger.debug(`Generating sequence level ${level}`, { availableClips: availableClips.length });
     
     const sequence = [];
     for (let i = 0; i < level; i++) {
@@ -273,6 +291,15 @@ const App = () => {
     // Mark sequence as active
     gameAbortRef.current = false;
     setGamePhase(GamePhase.demonstrating);
+
+    // Validate sequence has corresponding pads
+    logger.debug('Demo sequence generated', { sequence });
+    sequence.forEach(clipId => {
+      const hasPad = Array.from(unifiedPads.values()).some(pad => pad.id === clipId);
+      if (!hasPad) {
+        logger.warn('Demo sequence contains clip without pad', { clipId });
+      }
+    });
 
     for (let i = 0; i < sequence.length; i++) {
       // Check if aborted
@@ -360,6 +387,15 @@ const App = () => {
     const engine = engineRef.current;
     if (!engine) return;
 
+    // Validate clicked clip has corresponding pad
+    const hasPad = Array.from(unifiedPads.values()).some(pad => pad.id === clipId);
+    if (!hasPad) {
+      logger.warn('Game clicked clip without pad', { 
+        clipId, 
+        availablePads: Array.from(unifiedPads.values()).map(p => p.id) 
+      });
+    }
+
     const expectedClipId = gameSequence[playerProgress];
     const isCorrect = clipId === expectedClipId;
 
@@ -404,6 +440,12 @@ const App = () => {
       // Save high score to Supabase if user is logged in
       if (currentUser && gameScore > 0) {
         saveHighScore(gameScore, gameLevel);
+        // Trigger leaderboard refresh after a short delay to ensure the score is saved
+        setTimeout(() => {
+          // This will cause the Leaderboard component to refetch data
+          setShowLeaderboard(false);
+          setTimeout(() => setShowLeaderboard(true), 100);
+        }, 500);
       }
 
       // Clear feedback after delay
@@ -418,7 +460,8 @@ const App = () => {
     if (!currentUser) return;
     
     try {
-      const { error } = await supabase
+      // Save to high_scores table
+      const { error: highScoreError } = await supabase
         .from('high_scores')
         .insert({
           user_id: currentUser.id,
@@ -426,11 +469,31 @@ const App = () => {
           level_reached: level
         });
         
-      if (error) {
-        // Error saving high score
+      if (highScoreError) {
+        logger.error('Error saving high score', highScoreError, { userId: currentUser.id, score, level });
+      }
+
+      // Update profiles table with new high score if it's higher
+      if (score > (currentUser.highScore || 0)) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            high_score: score
+          })
+          .eq('id', currentUser.id);
+          
+        if (profileError) {
+          logger.error('Error updating profile high score', profileError, { userId: currentUser.id, score });
+        } else {
+          // Update local state
+          setCurrentUser(prev => ({
+            ...prev,
+            highScore: score
+          }));
+        }
       }
     } catch (err) {
-      // Failed to save high score
+      logger.error('Failed to save high score', err, { userId: currentUser?.id, score, level });
     }
   }, [currentUser]);
 
@@ -502,14 +565,27 @@ const App = () => {
     if (!engine) return;
     const currentUserId = currentUser?.id ?? currentUser?.authId ?? null;
 
+    // Check if user is registered before allowing recording
+    if (!currentUserId && !isRecording) {
+      setShowRegistration(true);
+      return;
+    }
+
     if (isRecording) {
       // Stop recording and save the sequence
       const recording = engine.stopRecording();
       if (!recording || recording.events.length === 0) {
         setLastRecording(null);
+        setRecordingDuration(0);
         alert('No pads were recorded. Press Record, then trigger pads before stopping.');
       } else {
         setLastRecording(recording);
+        // Calculate final duration in seconds
+        const ticksPerBeat = 480;
+        const secondsPerBeat = 60 / recording.bpm;
+        const secondsPerTick = secondsPerBeat / ticksPerBeat;
+        const durationSeconds = Math.round((recording.durationTicks || 0) * secondsPerTick);
+        setRecordingDuration(durationSeconds);
       }
       setIsRecording(false);
       
@@ -554,9 +630,25 @@ const App = () => {
             });
             
           if (dbError) {
-            // Error saving recording metadata
+            logger.error('Error saving recording metadata', dbError, { userId: currentUserId });
           } else {
-            // Recording saved successfully
+            // Recording saved successfully, update total recordings count
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({
+                total_recordings: (currentUser.totalRecordings || 0) + 1
+              })
+              .eq('id', currentUserId);
+              
+            if (updateError) {
+              logger.error('Error updating total recordings', updateError, { userId: currentUserId });
+            } else {
+              // Update local state
+              setCurrentUser(prev => ({
+                ...prev,
+                totalRecordings: (prev.totalRecordings || 0) + 1
+              }));
+            }
           }
         } catch (err) {
           // Failed to save recording
@@ -576,8 +668,22 @@ const App = () => {
       // Start recording
       engine.startRecording();
       setIsRecording(true);
+      setRecordingDuration(0);
     }
   }, [isRecording, ensureAudioReady, currentUser]);
+
+  // Update recording duration timer while recording
+  useEffect(() => {
+    if (!isRecording) return;
+    
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setRecordingDuration(elapsed);
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [isRecording]);
 
   // Play back the last recording
   const handlePlayRecording = useCallback(async () => {
@@ -634,7 +740,7 @@ const App = () => {
     try {
       // Render to audio
       const wavBlob = await engine.renderRecordingToAudio(lastRecording, (progress) => {
-        console.log(`Rendering: ${Math.round(progress * 100)}%`);
+        logger.debug('Rendering audio', { progress: Math.round(progress * 100) });
       });
 
       // Download the WAV file
@@ -648,7 +754,7 @@ const App = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Failed to export audio:', err);
+      logger.error('Failed to export audio', err);
       alert('Failed to export audio. Please try again.');
     } finally {
       setIsExporting(false);
@@ -658,6 +764,7 @@ const App = () => {
   // Clear the recording
   const handleClearRecording = useCallback(() => {
     setLastRecording(null);
+    setRecordingDuration(0);
   }, []);
 
   // Ensure empty clip states default to idle.
@@ -702,15 +809,17 @@ const App = () => {
         onRestartGame={handleRestartGame}
         isRecording={isRecording}
         onToggleRecord={handleToggleRecord}
-        hasRecording={lastRecording && lastRecording.events.length > 0}
-        onPlayRecording={handlePlayRecording}
+        hasRecording={!!lastRecording}
+        recordingDuration={recordingDuration}
         isPlayingRecording={isPlayingRecording}
         isExporting={isExporting}
+        onPlayRecording={handlePlayRecording}
         onDownloadRecording={handleDownloadRecording}
         onClearRecording={handleClearRecording}
         onShowTutorial={() => setShowTutorial(true)}
         onShowAccount={() => setShowAccount(true)}
-        onShowUserData={() => setShowUserData(!showUserData)}
+        onShowRecordings={() => setShowRecordings(true)}
+        onToggleLeaderboard={() => setShowLeaderboard(!showLeaderboard)}
         currentUser={currentUser}
       />
 
@@ -725,21 +834,24 @@ const App = () => {
         <AccountModal
           onClose={() => setShowAccount(false)}
           currentUser={currentUser}
+          initialView={showAccount === 'register' ? 'register' : null}
           onLogin={async (user) => {
             // Fetch user's profile from Supabase
             try {
               const { data: profileData, error } = await supabase
                 .from('profiles')
-                .select('id, username, avatar_url')
+                .select('id, username, avatar_url, high_score, total_recordings')
                 .eq('id', user.authId)
                 .single();
                 
               if (error) {
-                console.error('Error fetching profile:', error);
+                logger.error('Error fetching profile', error, { userId: user.authId });
                 // Fallback to auth user data
                 setCurrentUser({
                   ...user,
                   id: user.id ?? user.authId,
+                  highScore: 0,
+                  totalRecordings: 0
                 });
               } else {
                 // Merge auth data with profile data
@@ -747,22 +859,48 @@ const App = () => {
                   id: profileData.id,
                   username: profileData.username,
                   email: user.email,
-                  avatarUrl: profileData.avatar_url
+                  avatarUrl: profileData.avatar_url,
+                  highScore: profileData.high_score,
+                  totalRecordings: profileData.total_recordings
                 });
               }
             } catch (err) {
-              console.error('Failed to fetch profile:', err);
+              logger.error('Failed to fetch profile', err, { userId: user?.authId });
               setCurrentUser({
                 ...user,
                 id: user.id ?? user.authId,
+                highScore: 0,
+                totalRecordings: 0
               });
             }
-            setShowAccount(false);
           }}
           onLogout={() => {
             setCurrentUser(null);
             setShowAccount(false);
           }}
+        />
+      )}
+
+      {showRegistration && (
+        <RegistrationModal
+          isVisible={showRegistration}
+          onClose={() => setShowRegistration(false)}
+          onOpenAccount={() => {
+            setShowRegistration(false);
+            setShowAccount(true);
+          }}
+          onOpenRegistration={() => {
+            setShowRegistration(false);
+            setShowAccount('register');
+          }}
+        />
+      )}
+
+      {showRecordings && (
+        <RecordingsModal
+          isVisible={showRecordings}
+          onClose={() => setShowRecordings(false)}
+          currentUser={currentUser}
         />
       )}
 
@@ -783,21 +921,18 @@ const App = () => {
         />
         
         {appMode === 'game' && (
-          <Leaderboard 
-            isVisible={true} 
-            currentScore={gameScore}
-            currentUser={currentUser}
-          />
-        )}
-        
-        {showUserData && currentUser && (
-          <UserData 
-            isVisible={showUserData}
-            currentUser={currentUser}
-            onRefresh={() => {
-              // Trigger leaderboard refresh too
-            }}
-          />
+          <div 
+            className="lb-mobile-overlay" 
+            onClick={() => setShowLeaderboard(false)}
+            style={{ display: showLeaderboard ? 'flex' : 'none' }}
+          >
+            <Leaderboard 
+              isVisible={true} 
+              currentScore={gameScore}
+              currentUser={currentUser}
+              onClose={() => setShowLeaderboard(false)}
+            />
+          </div>
         )}
       </main>
     </div>
