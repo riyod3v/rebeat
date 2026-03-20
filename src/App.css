@@ -1775,3 +1775,57 @@
   .lp-game-stat__value { font-size: 16px; }
 }
 
+
+/* Volume Slider */
+.lp-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  outline: none;
+  opacity: 0.7;
+  transition: opacity .2s;
+}
+
+.lp-volume-slider:hover {
+  opacity: 1;
+}
+
+.lp-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--col, #57606f);
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.8);
+}
+
+.lp-volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--col, #57606f);
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.8);
+}
+
+/* Bar Timer */
+.lp-bar-timer {
+  width: 120px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-right: 12px;
+}
+
+.lp-bar-timer-fill {
+  height: 100%;
+  background: #3498db;
+  width: 0%;
+  /* No transition for immediate requestAnimationFrame updates */
+  box-shadow: 0 0 10px #3498db;
+}
+

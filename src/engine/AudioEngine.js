@@ -42,6 +42,7 @@ export class AudioEngine {
     this._clipIndex = new Map(); // clipId -> { clip, column, isCustom }
     this._loopNodesByClipId = new Map(); // clipId -> { node, output }
     this._loopGainsByClipId = new Map();
+    this._columnGains = new Map();       // column index -> Tone.Gain
 
     this._activeLoopByColumn = new Map(); // column -> clipId
     this._queuedLoopByColumn = new Map(); // column -> clipId
@@ -86,6 +87,15 @@ export class AudioEngine {
       }
     }
     this._loopGainsByClipId.clear();
+
+    for (const gain of this._columnGains.values()) {
+      try {
+        gain.dispose();
+      } catch {
+        // ignore
+      }
+    }
+    this._columnGains.clear();
 
     this._clipIndex.clear();
     this._activeLoopByColumn.clear();
@@ -169,6 +179,12 @@ export class AudioEngine {
   getQuantization() {
     return this._quantization;
   }
+  getBarProgress() {
+    if (Tone.Transport.state !== 'started') return 0;
+    const loopEnd = Tone.Time('1m').toTicks(); 
+    if (loopEnd === 0) return 0;
+    return (Tone.Transport.ticks % loopEnd) / loopEnd;
+  }
 
   loadProject(project) {
     this._project = project;
@@ -177,6 +193,20 @@ export class AudioEngine {
     this._loopNodesByClipId.clear();
     this._activeLoopByColumn.clear();
     this._queuedLoopByColumn.clear();
+
+    // Dispose old column gains
+    for (const gain of this._columnGains.values()) {
+      try { gain.dispose(); } catch { /* ignore */ }
+    }
+    this._columnGains.clear();
+
+    // Create column gains
+    for (const track of project.tracks) {
+      if (!this._columnGains.has(track.column)) {
+        const gain = new Tone.Gain(1).connect(this._master);
+        this._columnGains.set(track.column, gain);
+      }
+    }
 
     for (const track of project.tracks) {
       for (const clip of track.clips) {
@@ -187,14 +217,27 @@ export class AudioEngine {
     for (const clip of project.customClips) {
       // custom clips use their own (custom) column index, but quantization rules are same.
       this._clipIndex.set(clip.id, { clip, column: clip.column, isCustom: true, track: null });
+      // Ensure gain exists for custom column
+      if (!this._columnGains.has(clip.column)) {
+        const gain = new Tone.Gain(1).connect(this._master);
+        this._columnGains.set(clip.column, gain);
+      }
     }
 
     // Pre-create loop nodes to avoid first-trigger gaps.
-    for (const { clip } of this._clipIndex.values()) {
+    for (const { clip, column } of this._clipIndex.values()) {
       if (clip.type !== 'loop') continue;
 
-      const node = this._createLoopNode(clip);
+      const node = this._createLoopNode(clip, column);
       this._loopNodesByClipId.set(clip.id, node);
+    }
+  }
+
+  setColumnVolume(column, volume) {
+    const gain = this._columnGains.get(column);
+    if (gain) {
+      // Ramp for smooth volume change
+      gain.gain.rampTo(clampNumber(volume, { min: 0, max: 1 }), 0.1);
     }
   }
 
@@ -285,11 +328,14 @@ export class AudioEngine {
   }
 
   stopColumn(column) {
-    const active = this._activeLoopByColumn.get(column);
-    const queued = this._queuedLoopByColumn.get(column);
+    const active = thi, column) {
+    const loopEnd = '1m';
+    
+    // Connect to column gain instead of master
+    const columnGain = this._columnGains.get(column) || this._master;
 
-    // Always let loops finish the bar when stopping.
-    const tick = this._nextTick('1m');
+    const gain = new Tone.Gain(1);
+    gain.connect(columnGainck('1m');
 
     if (queued) {
       this._queuedLoopByColumn.delete(column);
@@ -376,24 +422,28 @@ export class AudioEngine {
             gain.gain.rampTo(1, LOOP_START_FADE_SECONDS, audioTime);
             // Start immediately at the scheduled audio time
             player.start(audioTime);
-          },
-          stop: ({ transportTick, audioTime }) => {
-            void transportTick;
-            gain.gain.rampTo(0, LOOP_STOP_FADE_SECONDS, audioTime);
-            // Stop after fade
-            try {
-              player.stop(audioTime + LOOP_STOP_FADE_SECONDS + 0.01);
-            } catch {
-              try { player.stop(); } catch { /* ignore */ }
-            }
-          },
-          dispose: () => player.dispose(),
-        },
-      };
-    }
+    // Get column info
+    const entry = this._clipIndex.get(clip.id);
+    const columnGain = entry ? (this._columnGains.get(entry.column) || this._master) : this._master;
 
-    // Fallback: silent generated loop.
-    const node = createGeneratedLoop('default', { loopEnd });
+    this._scheduleAtTick(tick, ({ audioTime }) => {
+      this._setClipState(clip.id, 'playing');
+
+      // Calculate duration based on clip bars
+      const bars = typeof clip.source?.bars === 'number' ? clip.source.bars : 0.5;
+      const barSeconds = Tone.Time('1m').toSeconds();
+      const durationMs = Math.max(200, Math.floor(bars * barSeconds * 1000));
+      // Add buffer time for disposal (100ms after playback ends)
+      const disposeMs = durationMs + 100;
+
+      if (clip.source?.kind === 'generated') {
+        playGeneratedOneShot(clip.source.generator, { destination: columnGain, time: audioTime });
+      } else if (clip.source?.kind === 'url') {
+        const cleanUrl = cleanAudioUrl(clip.source.url);
+        const cachedBuffer = this._bufferCache.get(cleanUrl);
+        const player = cachedBuffer
+          ? new Tone.Player(cachedBuffer).connect(columnGain)
+          : new Tone.Player(cleanUrl).connect(columnGain});
     node.output.connect(gain);
     return {
       node: {

@@ -2,8 +2,36 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FaUser, FaPlay, FaStop, FaGamepad, FaRedo, FaQuestionCircle, FaDownload, FaTrash, FaMusic } from 'react-icons/fa';
 import { GamePhase } from './padStates';
 
+const BarTimer = ({ engineRef, isPlaying }) => {
+  const [progress, setProgress] = useState(0);
+  const requestRef = useRef();
+
+  const animate = () => {
+    if (engineRef.current && isPlaying) {
+      // getBarProgress returns 0-1
+      const p = engineRef.current.getBarProgress();
+      setProgress(p);
+    } else {
+      setProgress(0);
+    }
+    requestRef.current = requestAnimationFrame(animate);
+  };
+
+  useEffect(() => {
+    requestRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(requestRef.current);
+  }, [isPlaying]);
+
+  return (
+    <div className="lp-bar-timer" title="Bar Progress">
+       <div className="lp-bar-timer-fill" style={{ width: `${progress * 100}%` }} />
+    </div>
+  );
+};
+
 export function TopBar({
   isPlaying,
+  engineRef,
   onToggleTransport,
   appMode = 'freestyle',
   onModeChange,
@@ -98,6 +126,7 @@ export function TopBar({
       <div className="lp-topbar__center">
         {!isGameMode ? (
           <>
+            <BarTimer engineRef={engineRef} isPlaying={isPlaying} />
             <button className="lp-btn lp-btn--transport" type="button" onClick={onToggleTransport}>
               {isPlaying ? 'Stop' : 'Play'}
             </button>

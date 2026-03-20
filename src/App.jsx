@@ -51,6 +51,7 @@ const App = () => {
   const [playerProgress, setPlayerProgress] = useState(0); // Index in sequence
   const [gameHighlightedPads, setGameHighlightedPads] = useState(new Set());
   const [gameFeedbackPads, setGameFeedbackPads] = useState(new Map());
+  const [columnVolumes, setColumnVolumes] = useState(() => Array(project.grid.columns).fill(1));
   const [isRecording, setIsRecording] = useState(false);
   const [lastRecording, setLastRecording] = useState(null); // Holds recorded sequence
   const [isPlayingRecording, setIsPlayingRecording] = useState(false);
@@ -114,7 +115,25 @@ const App = () => {
     if (!engine) return;
     engine.loadProject(project);
     engine.setTimeSignature(project.global.timeSignature ?? [4, 4]);
+
+    setColumnVolumes(prev => {
+       if (prev.length === project.grid.columns) return prev;
+       return Array(project.grid.columns).fill(1);
+    });
   }, [project]);
+
+  // Handle Volume Change
+  const handleVolumeChange = useCallback((col, val) => {
+    setColumnVolumes(prev => {
+      const next = [...prev];
+      next[col] = val;
+      return next;
+    });
+    const engine = engineRef.current;
+    if (engine) {
+      engine.setColumnVolume(col, val);
+    }
+  }, []);
 
   // =========================================================================
   // MEMOIZED UI DATA
@@ -780,7 +799,8 @@ const App = () => {
         if (!next.has(clip.id)) next.set(clip.id, PadState.idle);
       }
       return next;
-    });
+    });engineRef={engineRef}
+        
   }, [project]);
 
   // Determine if input should be disabled
@@ -913,6 +933,8 @@ const App = () => {
           onPadClick={handlePadClick}
           columnLabels={columnLabels}
           columnColors={columnColors}
+          columnVolumes={columnVolumes}
+          onVolumeChange={handleVolumeChange}
           columnActivity={columnActivity}
           gameHighlightedPads={gameHighlightedPads}
           gameFeedbackPads={gameFeedbackPads}

@@ -79,6 +79,8 @@ export function LaunchpadGrid({
   columnLabels,
   columnColors,
   columnActivity,
+  columnVolumes = [],   // Array of volume values (0-1)
+  onVolumeChange,       // Callback(colIndex, newValue)
   // Game mode props
   gameHighlightedPads = new Set(),
   gameFeedbackPads    = new Map(),
@@ -103,10 +105,34 @@ export function LaunchpadGrid({
               style={{
                 '--col':     columnColors?.[col] ?? '#57606f',
                 '--col-rgb': hexToRgbTriplet(columnColors?.[col] ?? '#57606f'),
+                flexDirection: 'column',
+                height: 'auto',
+                paddingBottom: '8px'
               }}
             >
-              <div className="lp-colhdr__dot" style={{ background: columnColors?.[col] ?? '#57606f' }} />
-              <div className="lp-colhdr__label">{columnLabels?.[col] ?? `Col ${col + 1}`}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                <div className="lp-colhdr__dot" style={{ background: columnColors?.[col] ?? '#57606f' }} />
+                <div className="lp-colhdr__label">{columnLabels?.[col] ?? `Col ${col + 1}`}</div>
+              </div>
+              
+              {/* Volume Slider */}
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={columnVolumes[col] ?? 1}
+                onChange={(e) => onVolumeChange && onVolumeChange(col, parseFloat(e.target.value))}
+                onClick={(e) => e.stopPropagation()}
+                className="lp-volume-slider"
+                style={{
+                  width: '100%',
+                  marginTop: '6px',
+                  height: '4px',
+                  accentColor: columnColors?.[col] ?? '#57606f',
+                  cursor: 'pointer'
+                }}
+              />
             </div>
           ))}
         </div>
