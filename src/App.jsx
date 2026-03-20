@@ -799,8 +799,7 @@ const App = () => {
         if (!next.has(clip.id)) next.set(clip.id, PadState.idle);
       }
       return next;
-    });engineRef={engineRef}
-        
+    });
   }, [project]);
 
   // Determine if input should be disabled
@@ -818,6 +817,7 @@ const App = () => {
     <div className="lp-app">
       <TopBar
         isPlaying={isPlaying}
+        engineRef={engineRef}
         onToggleTransport={handleToggleTransport}
         appMode={appMode}
         onModeChange={handleModeChange}
